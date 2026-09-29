@@ -1,0 +1,132 @@
+# kuhl-shell prompt (wide)
+# Two-line box-drawing prompt; the header rule stretches to the terminal edge.
+"$schema" = 'https://starship.rs/config-schema.json'
+
+palette = 'atlas'
+
+format = '''
+[╭─](frame)$os$username$hostname${custom.path}${custom.ro}[\]](frame)$git_branch$git_status${custom.version}$fill$status$cmd_duration$time
+${custom.tasks}[╰─](frame)$character'''
+
+[palettes.atlas]
+frame  = '#5a6380'
+accent = '#769ff0'
+soft   = '#a3aed2'
+git    = '#c099ff'
+lang   = '#7dcfff'
+warn   = '#ffc777'
+bad    = '#ff757f'
+good   = '#c3e88d'
+
+[username]
+show_always = true
+style_user  = 'bold good'
+style_root  = 'bold bad'
+format      = '[\(](frame)[$user]($style)'
+
+[hostname]
+ssh_only = false
+trim_at  = "-"
+style    = 'bold good'
+format   = '[@$hostname]($style)[\)](frame)'
+
+
+[git_branch]
+symbol = ' '
+style  = 'bold git'
+format = '[─\(](frame)[$symbol$branch]($style)'
+
+[git_status]
+style  = 'warn'
+format = '[( $all_status$ahead_behind)]($style)[\)](frame)'
+
+[php]
+disabled = true
+symbol = ' '
+style  = 'lang'
+format = '[─\(](frame)[$symbol$version]($style)[\)](frame)'
+
+[nodejs]
+disabled = true
+symbol = ' '
+style  = 'lang'
+format = '[─\(](frame)[$symbol$version]($style)[\)](frame)'
+
+[deno]
+disabled = true
+symbol = '🦕 '
+style  = 'lang'
+format = '[─\(](frame)[$symbol$version]($style)[\)](frame)'
+
+[python]
+disabled = true
+symbol = ' '
+style  = 'lang'
+format = '[─\(](frame)[$symbol$version( $virtualenv)]($style)[\)](frame)'
+
+[fill]
+symbol = '─'
+style  = 'frame'
+
+[status]
+disabled = false
+symbol   = '✘ '
+style    = 'bold bad'
+format   = '[\(](frame)[$symbol$status]($style)[\)─](frame)'
+
+[cmd_duration]
+min_time = 2_000
+style    = 'warn'
+format   = '[\(](frame)[$duration]($style)[\)─](frame)'
+
+[time]
+disabled    = false
+time_format = '%H:%M'
+style       = 'soft'
+format      = '[\(](frame)[ $time]($style)[\)](frame)'
+
+[character]
+success_symbol = '[❯](bold good)'
+error_symbol   = '[❯](bold bad)'
+vimcmd_symbol  = '[❮](bold git)'
+
+[os]
+disabled = false
+style    = 'bold #e95420'
+format   = '[$symbol]($style)'
+
+[os.symbols]
+Ubuntu = ' '
+
+# Path with the middle collapsed (~/projects/…/mcp/src) — see path.sh
+[custom.path]
+command = '"$KUHL_SHELL/prompt/path.sh" 2 2'
+when    = true
+shell   = ['bash', '--noprofile', '--norc']
+style   = 'bold accent'
+format  = '[─\[](frame)[$output]($style)'
+
+# Lock after the path when the folder isn't writable
+[custom.ro]
+command = "echo ''"
+when    = '! test -w "$PWD"'
+shell   = ['bash', '--noprofile', '--norc']
+style   = 'bad'
+format  = '[ $output]($style)'
+
+# Project version (VERSION file or deno.json/package.json) — see version.sh
+[custom.version]
+command = '"$KUHL_SHELL/prompt/version.sh"'
+when    = '[ -n "$("$KUHL_SHELL/prompt/version.sh")" ]'
+shell   = ['bash', '--noprofile', '--norc']
+style   = 'lang'
+format  = '[─\(](frame)[ $output]($style)[\)](frame)'
+
+# Deno task menu on its own line under the header — see tasks.sh
+[custom.tasks]
+command = '"$KUHL_SHELL/prompt/tasks.sh"'
+when    = '[ -n "$("$KUHL_SHELL/prompt/tasks.sh")" ]'
+shell   = ['bash', '--noprofile', '--norc']
+style   = 'soft'
+format  = '''[│ ](frame)[ ](bold lang)[$output]($style)
+'''

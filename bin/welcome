@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Login welcome screen in the prompt's box frame: system, resources, network and
+# pending updates. Runs from init.sh on login shells (ssh, console); `welcome` reruns it.
+. "${KUHL_SHELL:-$HOME/.local/share/kuhl-shell}/lib/ui.sh"
+
+h=$(date +%H)
+if   (( 10#$h < 12 )); then greet="good morning"
+elif (( 10#$h < 18 )); then greet="good afternoon"
+else                        greet="good evening"; fi
+
+. /etc/os-release
+case $ID in
+    ubuntu) os_icon=$'\uf31b' ;; debian) os_icon=$'\uf306' ;; fedora) os_icon=$'\uf30a' ;;
+    arch)   os_icon=$'\uf303' ;; pop)    os_icon=$'\uf32a' ;; *)      os_icon=$'\uf17c' ;;
+esac
+read -r up _ < /proc/uptime; up=${up%.*}
+uptime=$(( up / 86400 ))d\ $(( up % 86400 / 3600 ))h\ $(( up % 3600 / 60 ))m
+uptime=${uptime#0d }
+read -r l1 l5 l15 _ < /proc/loadavg
+cpu=$(grep -m1 'model name' /proc/cpuinfo | sed 's/.*: //; s/(R)\|(TM)\|CPU \|Intel //g; s/Core //; s/ @.*//; s/  */ /g')
+
+mem_total=$(awk '/^MemTotal/ {print $2 * 1024}' /proc/meminfo)
+mem_used=$(( mem_total - $(awk '/^MemAvailable/ {print $2 * 1024}' /proc/meminfo) ))
+mem_pct=$(( mem_used * 100 / mem_total ))
+read -r disk_used disk_total < <(df -B1 --output=used,size / | tail -1)
+disk_pct=$(( disk_used * 100 / disk_total ))
+
+label() { printf '%s%s %-5s%s' "$ACCENT" "$1" "$2" "$R"; }
+dot="$FRAME · $R"
+bw=$(( COLS > 90 ? 30 : 20 ))
+
+top "$(seg "$B$GOOD" "$greet, $USER")─$(seg "$B$ACCENT" $' '"$(hostname)")" \
+    "$(seg "$SOFT" $' '"$(date '+%a %b %-d · %H:%M')")"
+row "$(label "$os_icon" os)  $B$PRETTY_NAME$R$dot${SOFT}kernel ${LANG_}$(uname -r)$R$dot${SOFT}up $GOOD$uptime$R"
+row "$(label $'' cpu)  $SOFT$cpu$R$dot$SOFT$(nproc) cores$R$dot${SOFT}load $WARN$l1 $l5 $l15$R"
+row "$(label $'' mem)  $(meter "$mem_pct" "$bw")  $B$(printf '%3d%%' "$mem_pct")$R  $SOFT$(human "$mem_used") / $(human "$mem_total")$R"
+row "$(label $'' disk)  $(meter "$disk_pct" "$bw")  $B$(printf '%3d%%' "$disk_pct")$R  $SOFT$(human "$disk_used") / $(human "$disk_total")$R"
+
+net=$(ip -4 -o addr show scope global | awk '{sub(/\/.*/, "", $4); printf "%s%s %s", (n++ ? "  " : ""), $2, $4}')
+row "$(label $'' net)  $SOFT${net:-offline}$R${SSH_CONNECTION:+$dot${SOFT}ssh from $GIT${SSH_CONNECTION%% *}$R}"
+
+# Update counts come from Ubuntu's MOTD cache when it exists (instant; sys-update refreshes
+# it), otherwise from apt directly.
+cache=/var/lib/update-notifier/updates-available
+if [[ -f $cache ]]; then
+    n=$(grep -oP '^\d+(?= updates? can be applied immediately)' "$cache")
+    sec=$(grep -oP '^\d+(?= of these updates (is a|are) standard security)' "$cache")
+elif command -v apt >/dev/null; then
+    n=$(apt list --upgradable 2>/dev/null | tail -n +2 | wc -l)
+fi
+if ! command -v apt-get >/dev/null; then
+    apt=
+elif (( ${n:-0} > 0 )); then
+    apt="$B$WARN$n update$( (( n > 1 )) && echo s) ready$R${sec:+$dot$BAD$sec security$R}$dot${SOFT}run ${B}update$R"
+else
+    apt="${GOOD}up to date$R"
+fi
+[[ -f /var/run/reboot-required ]] && apt+="$dot$B$BAD"$''" reboot required$R"
+[[ -n $apt ]] && row "$(label $'' apt)  $apt"
+
+bottom "$(seg "$SOFT" "dir · dir -h · update · dt")"

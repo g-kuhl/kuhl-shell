@@ -1,0 +1,87 @@
+# kuhl-shell prompt (compact)
+# Narrow-terminal variant, picked by init.sh when COLUMNS < 72.
+"$schema" = 'https://starship.rs/config-schema.json'
+
+palette = 'atlas'
+
+format = '''
+[╭─](frame)$os$username${custom.path}${custom.ro}[\]](frame)$git_branch$git_status${custom.version}$status
+${custom.tasks}[╰─](frame)$character'''
+
+[palettes.atlas]
+frame  = '#5a6380'
+accent = '#769ff0'
+git    = '#c099ff'
+warn   = '#ffc777'
+bad    = '#ff757f'
+good   = '#c3e88d'
+
+[username]
+show_always = true
+style_user  = 'bold good'
+style_root  = 'bold bad'
+format      = '[\(](frame)[$user]($style)[\)](frame)'
+
+
+[git_branch]
+symbol = ' '
+truncation_length = 12
+truncation_symbol = '…'
+style             = 'bold git'
+format            = '[─\(](frame)[$symbol$branch]($style)'
+
+[git_status]
+style  = 'warn'
+format = '[( $all_status$ahead_behind)]($style)[\)](frame)'
+
+[status]
+disabled = false
+symbol   = '✘'
+style    = 'bold bad'
+format   = '[─\(](frame)[$symbol$status]($style)[\)](frame)'
+
+[character]
+success_symbol = '[❯](bold good)'
+error_symbol   = '[❯](bold bad)'
+vimcmd_symbol  = '[❮](bold git)'
+
+[os]
+disabled = false
+style    = 'bold #e95420'
+format   = '[$symbol]($style)'
+
+[os.symbols]
+Ubuntu = ' '
+
+# Path with the middle collapsed (~/projects/…/mcp/src) — see path.sh
+[custom.path]
+command = '"$KUHL_SHELL/prompt/path.sh" 1 1'
+when    = true
+shell   = ['bash', '--noprofile', '--norc']
+style   = 'bold accent'
+format  = '[─\[](frame)[$output]($style)'
+
+# Lock after the path when the folder isn't writable
+[custom.ro]
+command = "echo ''"
+when    = '! test -w "$PWD"'
+shell   = ['bash', '--noprofile', '--norc']
+style   = 'bad'
+format  = '[ $output]($style)'
+
+# Project version (VERSION file or deno.json/package.json) — see version.sh
+[custom.version]
+command = '"$KUHL_SHELL/prompt/version.sh"'
+when    = '[ -n "$("$KUHL_SHELL/prompt/version.sh")" ]'
+shell   = ['bash', '--noprofile', '--norc']
+style   = 'lang'
+format  = '[─\(](frame)[ $output]($style)[\)](frame)'
+
+# Deno task menu on its own line under the header — see tasks.sh
+[custom.tasks]
+command = '"$KUHL_SHELL/prompt/tasks.sh"'
+when    = '[ -n "$("$KUHL_SHELL/prompt/tasks.sh")" ]'
+shell   = ['bash', '--noprofile', '--norc']
+style   = 'soft'
+format  = '''[│ ](frame)[ ](bold lang)[$output]($style)
+'''

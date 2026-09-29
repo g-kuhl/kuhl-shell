@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+# System update in the prompt's box frame: apt update → upgrade → autoremove → autoclean,
+# then snap refresh. Each step runs behind a spinner that shows apt's latest activity;
+# the full output goes to ~/.local/state/sys-update/last.log.
+. "${KUHL_SHELL:-$HOME/.local/share/kuhl-shell}/lib/ui.sh"
+command -v apt-get >/dev/null || { echo "update: needs apt (Debian/Ubuntu)" >&2; exit 1; }
+
+log_dir=${XDG_STATE_HOME:-$HOME/.local/state}/sys-update
+log=$log_dir/last.log
+mkdir -p "$log_dir"; : > "$log"
+apt_get=(sudo DEBIAN_FRONTEND=noninteractive apt-get -y
+         -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+started=$SECONDS failed=0
+
+elapsed() { local s=$1; (( s >= 60 )) && echo "$(( s / 60 ))m $(( s % 60 ))s" || echo "${s}s"; }
+
+cleanup() {
+    tput cnorm 2>/dev/null
+    [[ -n ${keepalive:-} ]] && kill "$keepalive" 2>/dev/null
+    [[ -n ${job:-} ]] && kill "$job" 2>/dev/null
+}
+trap cleanup EXIT
+trap 'echo; row "$BAD✘ interrupted$R"; exit 130' INT
+
+clear
+top "$(seg "$B$ACCENT" $' system update')─$(seg "$B$GOOD" $' '"$(hostname)")" \
+    "$(seg "$SOFT" $' '"started $(date +%H:%M)")"
+
+# Ask for the password up front (in plain view), then keep sudo alive for long upgrades.
+sudo -v -p "$(row "${WARN}"$''" sudo password for %u: $R")" || { bottom "$(seg "$BAD" "sudo failed")"; exit 1; }
+while sleep 50; do sudo -n true 2>/dev/null; done & keepalive=$!
+
+# step LABEL CMD... → spinner line while CMD runs, then ✔/✘ with the time it took.
+# Sets $out to what CMD printed, for the caller to summarize.
+step() {
+    local label=$1; shift
+    local mark=$(( $(wc -l < "$log") + 1 )) t0=$SECONDS frames=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏) i=0 room act
+    room=$(( COLS - 34 ))
+    tput civis 2>/dev/null
+    "$@" >> "$log" 2>&1 & job=$!
+    while kill -0 "$job" 2>/dev/null; do
+        act=$(tail -n +"$mark" "$log" | grep -v '^\s*$' | tail -1 | tr -d '\r')
+        (( ${#act} > room )) && act=${act:0:room-1}…
+        printf '\r\e[K%s│%s %s%s%s %-26s %s%s%s' "$FRAME" "$R" "$ACCENT" "${frames[i++ % 10]}" "$R" "$label" "$FRAME" "$act" "$R"
+        sleep 0.1
+    done
+    wait "$job"; local rc=$?; job=
+    tput cnorm 2>/dev/null
+    out=$(tail -n +"$mark" "$log")
+    local took; took=$(elapsed $(( SECONDS - t0 )))
+    if (( rc == 0 )); then
+        printf '\r\e[K%s│%s %s✔%s %-26s %s%s%s\n' "$FRAME" "$R" "$GOOD" "$R" "$label" "$FRAME" "$took" "$R"
+    else
+        printf '\r\e[K%s│%s %s✘ %-26s%s %s%s (exit %d)%s\n' "$FRAME" "$R" "$BAD" "$label" "$R" "$FRAME" "$took" "$rc" "$R"
+        tail -n 8 <<< "$out" | while IFS= read -r l; do row "  $DIM$BAD${l:0:COLS-6}$R"; done
+        failed=1
+    fi
+    return "$rc"
+}
+note() { row "  $FRAME└$R $1"; }
+
+if step "refreshing package lists" "${apt_get[@]}" update; then
+    mapfile -t pkgs < <(apt list --upgradable 2>/dev/null | tail -n +2)
+    if (( ${#pkgs[@]} )); then
+        note "$B$WARN${#pkgs[@]}$R$SOFT package$( (( ${#pkgs[@]} > 1 )) && echo s) to upgrade$R"
+        shown=0
+        for p in "${pkgs[@]}"; do
+            (( ${#pkgs[@]} > 14 && shown++ == 12 )) && { row "      $FRAME… and $(( ${#pkgs[@]} - 12 )) more$R"; break; }
+            # name/suite new-version arch [upgradable from: old-version]
+            name=${p%%/*}; read -r _ new _ <<< "$p"; old=${p##*from: }; old=${old%]}
+            row "$(printf '      %s%-32s%s %s%s%s %s→%s %s%s%s' "$LANG_" "${name:0:32}" "$R" "$FRAME" "$old" "$R" "$FRAME" "$R" "$GOOD" "$new" "$R")"
+        done
+        if step "upgrading packages" "${apt_get[@]}" upgrade; then
+            sum=$(grep -m1 -E '^[0-9]+ upgraded' <<< "$out")
+            note "$SOFT${sum%.}$R"
+        fi
+    else
+        note "${GOOD}everything is already up to date$R"
+    fi
+fi
+
+if step "removing unused packages" "${apt_get[@]}" autoremove --purge; then
+    removed=$(grep -oP '\d+(?= to remove)' <<< "$out" | head -1)
+    (( ${removed:-0} )) && note "$SOFT$removed package$( (( removed > 1 )) && echo s) removed$R" || note "${SOFT}nothing to remove$R"
+fi
+
+cache_before=$(sudo du -sb /var/cache/apt/archives 2>/dev/null | cut -f1)
+if step "cleaning package cache" "${apt_get[@]}" autoclean; then
+    freed=$(( ${cache_before:-0} - $(sudo du -sb /var/cache/apt/archives 2>/dev/null | cut -f1) ))
+    (( freed > 4096 )) && note "${SOFT}freed $B$GOOD$(human "$freed")$R" || note "${SOFT}cache already clean$R"
+fi
+
+if command -v snap >/dev/null && step "refreshing snaps" sudo snap refresh; then
+    note "$SOFT$(grep -v '^\s*$' <<< "$out" | tail -1 | cut -c1-$(( COLS - 10 )))$R"
+fi
+
+# Refresh Ubuntu's MOTD cache (if present) so the welcome screen's update count is current.
+sudo /usr/lib/update-notifier/update-motd-updates-available --force >/dev/null 2>&1
+
+took=$(elapsed $(( SECONDS - started )))
+if [[ -f /var/run/reboot-required ]]; then
+    pk=$(sort -u /var/run/reboot-required.pkgs 2>/dev/null | paste -sd, | sed 's/,/, /g')
+    row "$B$BAD"$''" reboot required$R${pk:+ $FRAME($SOFT${pk:0:COLS-24}$FRAME)$R}"
+    reboot=$(seg "$B$BAD" "reboot required")
+else
+    reboot=$(seg "$GOOD" "no reboot needed")
+fi
+if (( failed )); then
+    bottom "$(seg "$B$BAD" "✘ finished with errors in $took")─$reboot" "$(seg "$SOFT" "log: ${log/#$HOME/\~}")"
+    exit 1
+fi
+bottom "$(seg "$B$GOOD" "✔ all done in $took")─$reboot"
