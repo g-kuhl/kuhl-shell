@@ -58,4 +58,4 @@ fi
 [[ -f /var/run/reboot-required ]] && apt+="$dot$B$BAD"$''" reboot required$R"
 [[ -n $apt ]] && row "$(label $'' apt)  $apt"
 
-bottom "$(seg "$SOFT" "dir · dir -h · update · dt")"
+bottom "$(seg "$SOFT" "dir · tree · df · du · ip · free · ports · update")"

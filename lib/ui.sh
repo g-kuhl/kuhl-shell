@@ -17,9 +17,10 @@ vlen() {
 rule() { local s; printf -v s '%*s' "$(( $1 > 0 ? $1 : 0 ))" ''; printf '%s' "${s// /─}"; }
 # seg COLOR TEXT → (text) in frame brackets, like the prompt's segments.
 seg() { printf '%s(%s%s%s)' "$FRAME" "$1" "$2" "$FRAME"; }
-# top/bottom LEFT [RIGHT]: a frame line with the gap filled to the terminal edge.
-top()    { local l=$1 r=${2:-}; printf '%s╭─%s%s%s%s\n' "$FRAME" "$l" "$FRAME" "$(rule $(( COLS - 2 - $(vlen "$l") - $(vlen "$r") )))" "$r$R"; }
-bottom() { local l=$1 r=${2:-}; printf '%s╰─%s%s%s%s\n' "$FRAME" "$l" "$FRAME" "$(rule $(( COLS - 2 - $(vlen "$l") - $(vlen "$r") )))" "$r$R"; }
+# top/bottom LEFT [RIGHT]: a frame line with the gap filled to the terminal edge;
+# RIGHT is dropped when both don't fit.
+top()    { local l=$1 r=${2:-}; (( $(vlen "$l") + $(vlen "$r") + 2 > COLS )) && r=; printf '%s╭─%s%s%s%s\n' "$FRAME" "$l" "$FRAME" "$(rule $(( COLS - 2 - $(vlen "$l") - $(vlen "$r") )))" "$r$R"; }
+bottom() { local l=$1 r=${2:-}; (( $(vlen "$l") + $(vlen "$r") + 2 > COLS )) && r=; printf '%s╰─%s%s%s%s\n' "$FRAME" "$l" "$FRAME" "$(rule $(( COLS - 2 - $(vlen "$l") - $(vlen "$r") )))" "$r$R"; }
 row()    { printf '%s│%s %s\n' "$FRAME" "$R" "$1"; }
 # meter PCT WIDTH → ━━━━━━──── colored good/warn/bad by how full it is.
 meter() {
@@ -30,4 +31,4 @@ meter() {
     printf '%s%s%s%s%s' "$c" "${a// /━}" "$FRAME" "${b// /─}" "$R"
 }
 # human BYTES → 4.1G
-human() { numfmt --to=iec --format='%.1f' "$1" | sed 's/\.0\([A-Z]\)/\1/'; }
+human() { if (( $1 < 1024 )); then echo "${1}B"; else numfmt --to=iec --format='%.1f' "$1" | sed 's/\.0\([A-Z]\)/\1/'; fi; }

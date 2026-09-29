@@ -17,22 +17,8 @@ dir() {
     LC_ALL=C sort -t $'\t' -k1,1 -k8,8f |
     gawk -F'\t' -v all="$all" -v cols="$cols" -v where="$where" -v branch="$branch" \
         -v ro="$([[ -w $target ]] || echo 1)" -v year="$(date +%Y)" \
-        -v pal="$ATLAS_FRAME $ATLAS_ACCENT $ATLAS_SOFT $ATLAS_GIT $ATLAS_LANG $ATLAS_WARN $ATLAS_BAD $ATLAS_GOOD" '
-    function rgb(h) { return sprintf("\033[38;2;%d;%d;%dm", strtonum("0x" substr(h,2,2)), strtonum("0x" substr(h,4,2)), strtonum("0x" substr(h,6,2))) }
-    function human(n,   u, i) {
-        split("B K M G T", u, " ")
-        for (i = 1; n >= 1024 && i < 5; i++) n /= 1024
-        return i == 1 ? n "B" : sprintf(n < 10 ? "%.1f%s" : "%.0f%s", n, u[i])
-    }
-    function perms(p,   s, i, c) {
-        for (i = 2; i <= 10; i++) {
-            c = substr(p, i, 1)
-            s = s (c == "r" ? WARN : c == "w" ? BAD : c ~ /[xsStT]/ ? GOOD : FRAME) c
-        }
-        return s R
-    }
-    function rule(n,   s) { s = ""; while (n-- > 0) s = s "─"; return s }
-    function pad(n) { return sprintf("%*s", n > 0 ? n : 0, "") }
+        -v pal="$ATLAS_FRAME $ATLAS_ACCENT $ATLAS_SOFT $ATLAS_GIT $ATLAS_LANG $ATLAS_WARN $ATLAS_BAD $ATLAS_GOOD" \
+        -f "$KUHL_SHELL/lib/style.awk" -e '
     # One entry as exactly w visible columns: icon, name (trimmed to fit), then perms/size/date.
     function cell(i, w, withsize,   meta, room, shown, line) {
         meta = P[i] "  " (withsize ? SOFT sprintf("%5s", S[i]) "  " : "") FRAME W[i] R
@@ -42,38 +28,16 @@ dir() {
         else { line = C[i] N[i] R (L[i] != "" ? FRAME " → " L[i] R : ""); room -= length(shown) }
         return C[i] I[i] R " " line pad(room + 1) meta
     }
-    BEGIN {
-        R = "\033[0m"; B = "\033[1m"; DIM = "\033[2m"
-        split(pal, c, " ")
-        FRAME = rgb(c[1]); ACCENT = rgb(c[2]); SOFT = rgb(c[3]); GIT = rgb(c[4])
-        LANG = rgb(c[5]); WARN = rgb(c[6]); BAD = rgb(c[7]); GOOD = rgb(c[8])
-        split("zip tar gz tgz xz bz2 7z rar deb zst", a, " "); for (k in a) arch[a[k]] = 1
-        split("png jpg jpeg gif svg webp ico bmp", a, " "); for (k in a) img[a[k]] = 1
-        split("ts tsx js jsx mjs py php sh bash rs go c h cpp java rb lua", a, " "); for (k in a) code[a[k]] = 1
-        split("json toml yaml yml ini conf cfg env lock xml", a, " "); for (k in a) conf[a[k]] = 1
-        split("md txt rst log pdf doc docx", a, " "); for (k in a) doc[a[k]] = 1
-    }
     {
         type = $2; name = $8
         if (!all && name ~ /^\./) { hidden++; next }
-        ext = tolower(name); sub(/.*\./, "", ext); if (ext == tolower(name)) ext = ""
         isdir = $1 == "d"
-        if (type == "l")      { icon = isdir ? "" : ""; color = LANG }
-        else if (type == "d") { icon = ""; color = B ACCENT; name = name "/" }
-        else {
-            total += $4
-            if ($3 ~ /x/)          { icon = ""; color = B GOOD }
-            else if (ext in arch)  { icon = ""; color = WARN }
-            else if (ext in img)   { icon = ""; color = GIT }
-            else if (ext in code)  { icon = ""; color = LANG }
-            else if (ext in conf)  { icon = ""; color = SOFT }
-            else if (ext in doc)   { icon = ""; color = SOFT }
-            else                   { icon = ""; color = "" }
-        }
-        if (name ~ /^\./) color = DIM color
+        classify(type, isdir, $3, name)
+        if (type == "d") name = name "/"
+        else if (type != "l") total += $4
         i = ++n
         if (isdir) D[++dirs] = i; else F[++files] = i
-        N[i] = name; L[i] = type == "l" ? $9 : ""; I[i] = icon; C[i] = color; P[i] = perms($3)
+        N[i] = name; L[i] = type == "l" ? $9 : ""; I[i] = ICON; C[i] = COLOR; P[i] = perms($3)
         S[i] = type == "d" ? "-" : human($4); W[i] = $5 " " ($6 == year ? $7 : " " $6)
     }
     END {

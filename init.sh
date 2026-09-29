@@ -1,14 +1,47 @@
 # kuhl-shell: sourced from ~/.bashrc by the block install.sh adds.
-# Sets up the starship prompt, `dir`, `dt`, `update`, `welcome`, and the login welcome screen.
+# Sets up the starship prompt, dir, tree, df, du, ip, free, ports, dt, update, welcome
+# and the login welcome screen.
 # Set KUHL_NO_WELCOME=1 before this line to skip the welcome screen at login.
 [[ $- == *i* ]] || return 0
 export KUHL_SHELL=${KUHL_SHELL:-$HOME/.local/share/kuhl-shell}
 . "$KUHL_SHELL/lib/palette.sh"
 . "$KUHL_SHELL/lib/dir.sh"
 
-unalias update welcome 2>/dev/null
+unalias update welcome ports df du ip tree free 2>/dev/null
 update()  { "$KUHL_SHELL/bin/sys-update" "$@"; }
 welcome() { "$KUHL_SHELL/bin/welcome" "$@"; }
+ports()   { "$KUHL_SHELL/bin/kports" "$@"; }
+
+# Framed versions of everyday commands. Only the usual interactive forms (df -h,
+# du -sh, ip a, tree -L 2, free -h) are framed, and only when output goes to the
+# terminal; other flags, pipes and redirects get the real command. `command df`
+# (or \df) always skips them.
+df() {
+    if [[ -t 1 && ( $# -eq 0 || $* == -h || $* == -H ) ]]; then "$KUHL_SHELL/bin/kdf"
+    else command df "$@"; fi
+}
+du() {
+    local a args=()
+    for a in "$@"; do [[ $a == -[sh]* && $a =~ ^-[sh]+$ ]] || args+=("$a"); done
+    if [[ -t 1 && ${#args[@]} -le 1 && -d ${args[0]:-.} && ( ${#args[@]} -eq 0 || ${args[0]} != -* ) ]]; then
+        "$KUHL_SHELL/bin/kdu" "${args[@]}"
+    else command du "$@"; fi
+}
+ip() {
+    if [[ -t 1 && ( $# -eq 0 || ( $# -eq 1 && $1 =~ ^(a|addr|address)$ ) ) ]]; then "$KUHL_SHELL/bin/kip"
+    else command ip "$@"; fi
+}
+free() {
+    if [[ -t 1 && ( $# -eq 0 || $1 =~ ^-[hmg]$ && $# -eq 1 ) ]]; then "$KUHL_SHELL/bin/kfree"
+    else command free "$@"; fi
+}
+tree() {
+    local a framed=1
+    for a in "$@"; do [[ $a == -* && ! $a =~ ^-(L[0-9]*|a|d)$ ]] && framed=; done
+    if [[ -t 1 && $framed ]]; then "$KUHL_SHELL/bin/ktree" "$@"
+    elif command -v tree >/dev/null; then command tree "$@"
+    else echo "tree: that option needs the tree package (sudo apt install tree)" >&2; return 1; fi
+}
 
 # dt: run a deno task by its number in the prompt's task line (dt 2), or by name.
 # Plain `dt` lists them. Extra arguments go to the task: dt 4 --filter foo

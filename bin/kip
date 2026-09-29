@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# ip a, framed: each interface with its state, addresses and MAC, then the default
+# route and DNS servers. Loopback and container veth pairs are counted, not listed.
+. "${KUHL_SHELL:-$HOME/.local/share/kuhl-shell}/lib/ui.sh"
+command -v jq >/dev/null || { command ip addr; exit; }
+
+top "$(seg "$B$ACCENT" $' network')" "$(seg "$SOFT" "$(hostname)")"
+
+skipped=()
+while IFS=$'\t' read -r name state mac mtu addrs; do
+    case $name in lo|veth*) skipped+=("$name"); continue ;; esac
+    case $name in
+        wl*)                  icon=$'' ;;
+        tun*|tap*|wg*|ppp*)   icon=$'' ;;
+        docker*|br-*|virbr*)  icon=$'' ;;
+        en*|eth*)             icon=$'' ;;
+        *)                    icon=$'' ;;
+    esac
+    case $state in
+        UP)      st="$GOOD● up  $R" ;;
+        DOWN)    st="$BAD● down$R" ;;
+        *)       st="$WARN● ${state,,}$R" ;;   # UNKNOWN is normal for tun/vpn links
+    esac
+    [[ $state == UNKNOWN && -n $addrs ]] && st="$GOOD● up  $R"
+    row "$(printf '%s%s %-12s%s %s  %s%s%s' "$ACCENT" "$icon" "$name" "$R" "$st" "$FRAME" "$( [[ $mac != - ]] && printf "%s · " "$mac")mtu $mtu" "$R")"
+    for a in $addrs; do
+        fam=${a%%=*} ip=${a#*=}
+        if [[ $fam == inet ]]; then row "    ${SOFT}inet  $B$GOOD$ip$R"
+        else row "    ${SOFT}inet6 $LANG_$ip$R"; fi
+    done
+done < <(ip -j addr | jq -r '.[] | [.ifname, .operstate, (if .link_type == "ether" then .address else "-" end), .mtu,
+          ([.addr_info[] | select(.scope != "link" or .family == "inet") | "\(.family)=\(.local)/\(.prefixlen)"] | join(" "))] | @tsv')
+
+gw=$(ip -j route show default 2>/dev/null | jq -r '.[0] | select(.) | "\(.gateway // "direct") via \(.dev)"')
+if command -v resolvectl >/dev/null; then
+    dns=$(resolvectl dns 2>/dev/null | awk -F': ' 'NF > 1 && $2 != "" { print $2 }' | tr ' ' '\n' | awk '!seen[$0]++' | paste -sd' ')
+else
+    dns=$(awk '/^nameserver/ { print $2 }' /etc/resolv.conf | paste -sd' ')
+fi
+row ""
+row "${ACCENT}"$''" ${SOFT}gateway $R$B${gw:-none}$R"
+row "${ACCENT}"$''" ${SOFT}dns     $R${dns:-none}"
+foot="${#skipped[@]} hidden"; (( ${#skipped[@]} )) || foot="all interfaces shown"
+(( ${#skipped[@]} )) && foot="hidden: $(printf '%s\n' "${skipped[@]}" | sed 's/^veth.*/veth/' | sort | uniq -c | awk '{ printf "%s%s", (n++ ? ", " : ""), ($1 > 1 ? $1 " " $2 "s" : $2) }')"
+bottom "$(seg "$SOFT" "$foot · full detail: command ip a")"

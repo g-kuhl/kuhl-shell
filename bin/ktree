@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# tree, framed: folders first, dir's icons and colors, and heavy folders (.git,
+# node_modules, caches) shown but not opened.
+#   tree [-L depth] [-a] [-d] [path]    depth defaults to 3; -a hidden files; -d folders only
+. "${KUHL_SHELL:-$HOME/.local/share/kuhl-shell}/lib/ui.sh"
+depth=3 all= dirs_only= target=.
+while (( $# )); do
+    case $1 in
+        -L) depth=$2; shift ;;
+        -L*) depth=${1#-L} ;;
+        -a) all=1 ;;
+        -d) dirs_only=1 ;;
+        -*) echo "tree: unsupported option $1 (use: command tree $*)" >&2; exit 2 ;;
+        *)  target=$1 ;;
+    esac
+    shift
+done
+[[ -d $target ]] || { echo "tree: $target: not a directory" >&2; exit 1; }
+[[ $depth =~ ^[1-9][0-9]*$ ]] || { echo "tree: -L needs a number" >&2; exit 2; }
+
+where=$(cd "$target" && "$KUHL_SHELL/prompt/path.sh" 2 2)
+branch=$(git -C "$target" branch --show-current 2>/dev/null)
+head=$(seg "$B$ACCENT" $' '"$where")
+[[ -n $branch ]] && head+="─$(seg "$B$GIT" $' '"$branch")"
+top "$head" "$(seg "$SOFT" "depth $depth")"
+
+heavy=(.git node_modules .venv venv __pycache__ .cache .next dist target vendor .deno)
+prune=(); for h in "${heavy[@]}"; do prune+=(-name "$h" -o); done
+hide=(); [[ $all ]] || hide=(-name '.*' -prune -o)
+only=(); [[ $dirs_only ]] && only=(-type d)
+
+# depth <tab> type <tab> dir-or-link-to-dir <tab> mode <tab> path <tab> heavy?
+{
+    find "$target" -mindepth 1 -maxdepth "$depth" "${hide[@]}" \( "${prune[@]}" -false \) -prune \
+        -printf '%d\t%y\t%Y\t%M\t%P\t1\n' -o "${only[@]}" -printf '%d\t%y\t%Y\t%M\t%P\t0\n'
+} 2>/dev/null | gawk -F'\t' -v cols="$COLS" -v limit="${KUHL_TREE_LIMIT:-400}" \
+    -v pal="$ATLAS_FRAME $ATLAS_ACCENT $ATLAS_SOFT $ATLAS_GIT $ATLAS_LANG $ATLAS_WARN $ATLAS_BAD $ATLAS_GOOD" \
+    -f "$KUHL_SHELL/lib/style.awk" -e '
+    {
+        path = $5; parent = path; name = path
+        if (sub(/\/[^\/]*$/, "", parent)) sub(/.*\//, "", name); else parent = ""
+        isdir = $3 == "d"
+        # sort key: folders first, then case-insensitive name
+        kids[parent][(isdir ? "0" : "1") tolower(name) "\t" name] = path
+        T[path] = $2; ISDIR[path] = isdir; M[path] = $4; HEAVY[path] = $6; NAME[path] = name
+        if (isdir) nd++; else nf++
+    }
+    function walk(parent, prefix,   k, keys, n, i, path, last, line, label) {
+        n = asorti(kids[parent], keys)
+        for (i = 1; i <= n; i++) {
+            if (shown >= limit) { more++; continue }
+            path = kids[parent][keys[i]]; last = i == n
+            classify(T[path], ISDIR[path], M[path], NAME[path])
+            label = COLOR NAME[path] (ISDIR[path] ? "/" : "") R
+            if (HEAVY[path]) label = label FRAME " …" R
+            line = FRAME "│ " prefix (last ? "└── " : "├── ") R COLOR ICON R " " label
+            print line; shown++
+            if (path in kids) walk(path, prefix (last ? "    " : "│   "))
+        }
+    }
+    END {
+        if ("" in kids) walk("", ""); else print FRAME "│ " R DIM SOFT "(empty)" R
+        if (more) print FRAME "│ " R DIM SOFT "… " more " more (KUHL_TREE_LIMIT=" limit ")" R
+        foot = sprintf("%d dir%s · %d file%s", nd, nd == 1 ? "" : "s", nf, nf == 1 ? "" : "s")
+        print FRAME "╰─(" SOFT foot FRAME ")" rule(cols - length(foot) - 4) R
+    }'

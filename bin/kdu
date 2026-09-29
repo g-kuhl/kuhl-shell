@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# du, framed: what's taking up space in a folder, biggest first, with bars relative to
+# the biggest item. Shows as many rows as fit on screen and rolls the rest into one line.
+. "${KUHL_SHELL:-$HOME/.local/share/kuhl-shell}/lib/ui.sh"
+target=${1:-.}
+[[ -d $target ]] || { echo "du: $target: not a directory" >&2; exit 1; }
+
+where=$(cd "$target" && "$KUHL_SHELL/prompt/path.sh" 2 2)
+top "$(seg "$B$ACCENT" $' '"$where")" "$(seg "$SOFT" "disk usage")"
+[[ -t 1 ]] && printf '%s│%s %smeasuring…%s\r' "$FRAME" "$R" "$DIM$SOFT" "$R"
+
+errs=$(mktemp); trap 'rm -f "$errs"' EXIT
+# size <tab> type <tab> name, one per top-level entry, biggest first
+mapfile -t items < <(
+    find "$target" -mindepth 1 -maxdepth 1 -printf '%y\t%f\0' 2>>"$errs" |
+    while IFS=$'\t' read -r -d '' type name; do
+        size=$(du -sxb -- "$target/$name" 2>>"$errs" | cut -f1)
+        printf '%s\t%s\t%s\n' "${size:-0}" "$type" "$name"
+    done | sort -t $'\t' -k1,1rn)
+[[ -t 1 ]] && printf '\e[K'
+
+total=0; for l in "${items[@]}"; do total=$(( total + ${l%%$'\t'*} )); done
+max=${items[0]%%$'\t'*}; (( ${max:-0} > 0 )) || max=1
+lines=${LINES:-$(tput lines 2>/dev/null || echo 40)}
+show=$(( lines - 5 )); (( show < 8 )) && show=8
+bw=$(( COLS > 100 ? 30 : 20 ))
+
+i=0 rest=0 rest_n=0
+for l in "${items[@]}"; do
+    IFS=$'\t' read -r size type name <<< "$l"
+    if (( ++i > show && ${#items[@]} > show + 1 )); then rest=$(( rest + size )); (( rest_n++ )); continue; fi
+    pct=$(( total ? size * 100 / total : 0 )); rel=$(( size * 100 / max ))
+    color=$R; [[ $type == d ]] && { color=$B$ACCENT; name+=/; }
+    [[ $type == l ]] && color=$LANG_
+    [[ $name == .* ]] && color=$DIM$color
+    fill=$(( rel * bw / 100 )); (( size > 0 && fill == 0 )) && fill=1
+    printf -v a '%*s' "$fill" ''; printf -v b '%*s' "$(( bw - fill ))" ''
+    c=$GOOD; (( pct >= 25 )) && c=$WARN; (( pct >= 50 )) && c=$BAD
+    row "$(printf '%s%s%s%s%s  %s%7s%s  %s%3d%%%s  %s%s%s' "$c" "${a// /━}" "$FRAME" "${b// /─}" "$R" \
+        "$B" "$(human "$size")" "$R" "$FRAME" "$pct" "$R" "$color" "$name" "$R")"
+done
+(( rest_n )) && row "$(printf '%s%*s  %7s  %3d%%  … and %d more%s' "$FRAME" "$bw" '' "$(human "$rest")" "$(( rest * 100 / (total ? total : 1) ))" "$rest_n" "$R")"
+(( ${#items[@]} )) || row "$DIM$SOFT  (empty)$R"
+
+foot="$(human "$total") in ${#items[@]} item$( (( ${#items[@]} != 1 )) && echo s)"
+[[ -s $errs ]] && foot+=" · some folders unreadable"
+bottom "$(seg "$SOFT" "$foot")"

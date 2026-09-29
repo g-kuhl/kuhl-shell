@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# ports: what's listening on this machine, by port, with the program behind it.
+#   ports       TCP listeners      ports -u   add UDP      ports -s   run with sudo
+#   (without sudo, programs owned by other users show as "?")
+udp= elevate=
+for a in "$@"; do
+    case $a in
+        -u) udp=1 ;;
+        -s) elevate=1 ;;
+        *)  echo "usage: ports [-u] [-s]" >&2; exit 2 ;;
+    esac
+done
+if [[ $elevate ]] && (( EUID )); then
+    exec sudo KUHL_SHELL="${KUHL_SHELL:-$HOME/.local/share/kuhl-shell}" COLUMNS="${COLUMNS:-$(tput cols)}" "$0" ${udp:+-u}
+fi
+. "${KUHL_SHELL:-$HOME/.local/share/kuhl-shell}/lib/ui.sh"
+
+top "$(seg "$B$ACCENT" $' listening ports')" "$(seg "$SOFT" "$(hostname)")"
+# proto <tab> port <tab> scope <tab> program, merged across v4/v6 and duplicate sockets
+ss -Hlnptu 2>/dev/null | awk -v udp="$udp" '
+{
+    proto = $1; local = $5; users = $0
+    if (proto != "tcp" && !udp) next
+    port = local; sub(/.*:/, "", port)
+    addr = local; sub(/:[^:]*$/, "", addr); gsub(/[\[\]]/, "", addr); sub(/%.*/, "", addr)
+    scope = (addr == "0.0.0.0" || addr == "::" || addr == "*") ? "all" : (addr ~ /^127\.|^::1$/) ? "local" : addr
+    prog = "?"
+    if (match(users, /users:\(\("[^"]+"/)) { prog = substr(users, RSTART + 9, RLENGTH - 10) }
+    key = proto "\t" port "\t" prog
+    if (!(key in s)) { s[key] = scope; order[++n] = key }
+    else if (index(s[key], scope) == 0) s[key] = s[key] "," scope
+}
+END { for (i = 1; i <= n; i++) print order[i] "\t" s[order[i]] }' |
+sort -t $'\t' -k2,2n -k1,1 | {
+    count=0 unknown=0
+    while IFS=$'\t' read -r proto port prog scope; do
+        (( count++ ))
+        [[ $prog == "?" ]] && (( unknown++ ))
+        case $scope in
+            *all*)   sc="$WARN● open to network$R" ;;
+            local*)  sc="$GOOD● this machine only$R" ;;
+            *)       sc="$SOFT● $scope$R" ;;
+        esac
+        pc=$LANG_; [[ $prog == "?" ]] && pc=$FRAME
+        row "$(printf '%s%-4s%s %s%6s%s  %s%-18s%s  %s' "$FRAME" "${proto}" "$R" "$B$ACCENT" "$port" "$R" "$pc" "${prog:0:18}" "$R" "$sc")"
+    done
+    (( count )) || row "$DIM${SOFT}nothing is listening$R"
+    foot="$count port$( (( count != 1 )) && echo s)"
+    (( unknown && EUID )) && foot+=" · -s: all programs"
+    [[ -z $udp ]] && foot+=" · -u: UDP"
+    bottom "$(seg "$SOFT" "$foot")"
+}

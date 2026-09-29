@@ -47,7 +47,7 @@ if (( ${#missing[@]} )); then
     if command -v apt-get >/dev/null && ask "install ${missing[*]} with apt?"; then
         sudo apt-get install -y -qq "${missing[@]}" && ok "installed ${missing[*]}"
     else
-        warn "missing ${missing[*]}: dir needs gawk, the deno task line needs jq"
+        warn "missing ${missing[*]}: dir/tree need gawk, ip and the deno task line need jq"
     fi
 fi
 if ! command -v starship >/dev/null; then
@@ -56,7 +56,7 @@ if ! command -v starship >/dev/null; then
         curl -fsSL https://starship.rs/install.sh | sh -s -- -y -b "$HOME/.local/bin" >/dev/null
         ok "installed starship to ~/.local/bin (make sure it's on your PATH)"
     else
-        warn "no starship: dir, update and welcome still work, but the prompt won't change"
+        warn "no starship (https://starship.rs): the commands still work, but the prompt won't change"
     fi
 fi
 
@@ -88,5 +88,5 @@ if [[ ! -e $HOME/.hushlogin ]]; then
     ok "created ~/.hushlogin so the welcome screen replaces the system login banner"
 fi
 
-say "icons need a Nerd Font in your terminal: https://www.nerdfonts.com"
+say "icons need a Nerd Font set as your terminal font: https://www.nerdfonts.com/font-downloads"
 printf '\e[38;2;90;99;128m╰─(\e[38;2;195;232;141mdone\e[38;2;90;99;128m)\e[0m open a new terminal, or run: source ~/.bashrc\n'

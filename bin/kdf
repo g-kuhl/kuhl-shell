@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# df, framed: one meter per real filesystem (no tmpfs/snap/overlay noise), fullest first.
+. "${KUHL_SHELL:-$HOME/.local/share/kuhl-shell}/lib/ui.sh"
+
+mapfile -t fs < <(df -B1 --output=source,fstype,used,avail,target \
+    -x tmpfs -x devtmpfs -x squashfs -x overlay -x efivarfs -x fuse.snapfuse -x ramfs 2>/dev/null |
+    tail -n +2 | awk '$3 + $4 > 0 { printf "%d %s\n", $3 * 100 / ($3 + $4), $0 }' | sort -rn)
+
+mw=4; for l in "${fs[@]}"; do read -r _ _ _ _ _ t <<< "$l"; (( ${#t} > mw )) && mw=${#t}; done
+(( mw > 24 )) && mw=24
+bw=$(( COLS - mw - 58 )); (( bw > 30 )) && bw=30; (( bw < 10 )) && bw=10
+
+top "$(seg "$B$ACCENT" $' disks')" "$(seg "$SOFT" "$(hostname)")"
+used_all=0 size_all=0
+for l in "${fs[@]}"; do
+    read -r pct src type used avail target <<< "$l"
+    size=$(( used + avail )); used_all=$(( used_all + used )); size_all=$(( size_all + size ))
+    case $target:$type in
+        /boot*)             icon=$'' ;;
+        /media/*|/mnt/*|/run/media/*) icon=$'' ;;
+        *:nfs*|*:cifs|*:smb*|*:fuse.sshfs) icon=$'' ;;
+        *)                  icon=$'' ;;
+    esac
+    (( ${#target} > mw )) && target=…${target: -(mw-1)}
+    row "$(printf '%s%s%s %s%-*s%s  %s  %s%3d%%%s  %s%7s%s %s/ %-7s%s  %s%s %s%s' \
+        "$ACCENT" "$icon" "$R" "$B" "$mw" "$target" "$R" "$(meter "$pct" "$bw")" "$B" "$pct" "$R" \
+        "$SOFT" "$(human "$used")" "$R" "$FRAME" "$(human "$size")" "$R" "$FRAME" "$type" "${src##*/}" "$R")"
+done
+(( ${#fs[@]} )) || row "$DIM${SOFT}no disks found$R"
+bottom "$(seg "$SOFT" "${#fs[@]} filesystem$( (( ${#fs[@]} != 1 )) && echo s) · $(human "$used_all") used of $(human "$size_all")")"

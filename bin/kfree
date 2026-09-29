@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# free, framed: RAM and swap meters, what's in cache, and the biggest memory users.
+. "${KUHL_SHELL:-$HOME/.local/share/kuhl-shell}/lib/ui.sh"
+
+mi() { awk -v k="$1:" '$1 == k { print $2 * 1024 }' /proc/meminfo; }
+total=$(mi MemTotal) avail=$(mi MemAvailable) cache=$(( $(mi Cached) + $(mi Buffers) + $(mi SReclaimable) ))
+swap_total=$(mi SwapTotal) swap_free=$(mi SwapFree)
+used=$(( total - avail )) swap_used=$(( swap_total - swap_free ))
+bw=$(( COLS > 100 ? 30 : 20 ))
+
+top "$(seg "$B$ACCENT" $' memory')" "$(seg "$SOFT" "$(hostname)")"
+line() {   # line ICON LABEL USED TOTAL
+    local pct=$(( $4 ? $3 * 100 / $4 : 0 ))
+    row "$(printf '%s%s %-5s%s %s  %s%3d%%%s  %s%s / %s%s' "$ACCENT" "$1" "$2" "$R" "$(meter "$pct" "$bw")" "$B" "$pct" "$R" "$SOFT" "$(human "$3")" "$(human "$4")" "$R")"
+}
+line $'' ram "$used" "$total"
+if (( swap_total )); then line $'' swap "$swap_used" "$swap_total"
+else row "$ACCENT"$''" swap $R  ${FRAME}none$R"; fi
+row "        ${SOFT}available $GOOD$(human "$avail")$R$FRAME · ${SOFT}cache $(human "$cache") $FRAME(freed automatically when needed)$R"
+row ""
+row "${SOFT}top memory users$R"
+# rss (KiB) and command, merged by program name so 30 chrome processes read as one line
+ps -eo rss=,comm= | awk '{ m[$2] += $1; n[$2]++ } END { for (k in m) printf "%d\t%d\t%s\n", m[k] * 1024, n[k], k }' |
+    sort -rn | head -6 | while IFS=$'\t' read -r bytes count name; do
+        pct=$(( bytes * 100 / total ))
+        row "$(printf '  %s  %s%7s%s  %s%3d%%%s  %s%s%s%s' "$(meter "$pct" 10)" "$B" "$(human "$bytes")" "$R" "$FRAME" "$pct" "$R" \
+            "$LANG_" "$name" "$R" "$( (( count > 1 )) && printf '%s ×%d%s' "$FRAME" "$count" "$R")")"
+    done
+bottom "$(seg "$SOFT" "$(human "$used") in use of $(human "$total")")"
