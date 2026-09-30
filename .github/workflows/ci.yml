@@ -12,7 +12,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Syntax check
         run: |
           for f in install.sh uninstall.sh init.sh bin/* lib/*.sh prompt/*.sh tests/*.sh; do
@@ -24,7 +24,7 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y gawk jq
       - name: Install, run and uninstall in a scratch home
