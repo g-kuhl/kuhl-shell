@@ -7,7 +7,15 @@ BASHRC=$HOME/.bashrc
 
 if [[ -f $BASHRC ]] && grep -qF '# >>> kuhl-shell >>>' "$BASHRC"; then
     cp "$BASHRC" "$BASHRC.bak-kuhl-shell-uninstall"
-    sed -i '/^# >>> kuhl-shell >>>$/,/^# <<< kuhl-shell <<<$/d' "$BASHRC"
+    # Drop the block and the blank line install.sh put before it. Rewrite in place
+    # (not sed -i) so a symlinked ~/.bashrc stays a symlink.
+    kept=$(awk '
+        skip { if ($0 == "# <<< kuhl-shell <<<") skip = 0; next }
+        $0 == "# >>> kuhl-shell >>>" { skip = 1; if (blank) blank--; next }
+        /^$/ { blank++; next }
+        { for (; blank; blank--) print ""; print }
+        END { for (; blank; blank--) print "" }' "$BASHRC")
+    printf '%s\n' "$kept" > "$BASHRC"
     echo "✔ removed kuhl-shell from ~/.bashrc (backup: ~/.bashrc.bak-kuhl-shell-uninstall)"
 fi
 if [[ -f $DEST/.kuhl-shell ]]; then

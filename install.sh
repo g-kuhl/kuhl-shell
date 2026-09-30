@@ -19,8 +19,8 @@ die()  { printf '\e[38;2;90;99;128m│\e[0m \e[38;2;255;117;127m✘\e[0m %s\n' "
 # ask QUESTION → true on yes. Reads the terminal directly so it works under curl | bash.
 ask() {
     [[ $yes ]] && return 0
-    [[ -r /dev/tty ]] || return 1
-    local a; printf '\e[38;2;90;99;128m│\e[0m \e[38;2;118;159;240m?\e[0m %s [y/N] ' "$1" > /dev/tty
+    { : < /dev/tty; } 2>/dev/null || return 1   # -r passes even with no controlling terminal
+    local a=; printf '\e[38;2;90;99;128m│\e[0m \e[38;2;118;159;240m?\e[0m %s [y/N] ' "$1" > /dev/tty
     read -r a < /dev/tty; [[ $a == [yY]* ]]
 }
 
@@ -71,13 +71,13 @@ ok "installed kuhl-shell $(cat "$DEST/VERSION") to ${DEST/#$HOME/\~}"
 
 # Hook into ~/.bashrc once, at the end so it wins over earlier prompt setups.
 if ! grep -qF "$BEGIN" "$BASHRC" 2>/dev/null; then
-    cp "$BASHRC" "$BASHRC.bak-kuhl-shell" 2>/dev/null || true
+    backup=; cp "$BASHRC" "$BASHRC.bak-kuhl-shell" 2>/dev/null && backup=" (backup: ~/.bashrc.bak-kuhl-shell)"
     {
         printf '\n%s\n' "$BEGIN"
         printf 'export KUHL_SHELL="%s"\n[ -f "$KUHL_SHELL/init.sh" ] && . "$KUHL_SHELL/init.sh"\n' "${DEST/#$HOME/\$HOME}"
         printf '%s\n' "$END"
     } >> "$BASHRC"
-    ok "added kuhl-shell to ~/.bashrc (backup: ~/.bashrc.bak-kuhl-shell)"
+    ok "added kuhl-shell to ~/.bashrc$backup"
 else
     ok "~/.bashrc already loads kuhl-shell"
 fi

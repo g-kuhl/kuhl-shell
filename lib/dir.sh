@@ -6,6 +6,7 @@ dir() {
     local all=0
     [[ $1 == -[ah] ]] && { all=1; shift; }
     local target=${1:-.}
+    command -v gawk >/dev/null || { echo "dir: needs gawk (sudo apt install gawk)" >&2; return 1; }
     [[ -d $target ]] || { echo "dir: $target: not a directory" >&2; return 1; }
     local cols=${COLUMNS:-$(tput cols)}
     local where branch

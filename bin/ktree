@@ -3,6 +3,7 @@
 # node_modules, caches) shown but not opened.
 #   tree [-L depth] [-a] [-d] [path]    depth defaults to 3; -a hidden files; -d folders only
 . "${KUHL_SHELL:-$HOME/.local/share/kuhl-shell}/lib/ui.sh"
+command -v gawk >/dev/null || { echo "tree: needs gawk (sudo apt install gawk)" >&2; exit 1; }
 depth=3 all= dirs_only= target=.
 while (( $# )); do
     case $1 in
