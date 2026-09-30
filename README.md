@@ -1,5 +1,9 @@
 # kuhl-shell
 
+[![CI](https://github.com/g-kuhl/kuhl-shell/actions/workflows/ci.yml/badge.svg)](https://github.com/g-kuhl/kuhl-shell/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/g-kuhl/kuhl-shell?include_prereleases)](https://github.com/g-kuhl/kuhl-shell/releases)
+
 A matching set of bash upgrades built around one look: box-drawing frames (`╭─ │ ╰─`), rules that stretch to the terminal edge, and the **atlas** palette.
 
 - **Prompt:** a two-line [starship](https://starship.rs) prompt.
@@ -106,6 +110,8 @@ lib/ui.sh        frame helpers (top/row/bottom, meters) for the bin/ scripts
 lib/style.awk    icons, colors and permission styling shared by dir and tree
 lib/dir.sh       the dir function
 prompt/          starship configs and the helper scripts they call
+tests/smoke.sh   installs into a scratch home, runs every command, uninstalls
+.github/         CI, release and housekeeping workflows, issue and PR templates
 ```
 
 ## Credits
@@ -117,6 +123,10 @@ kuhl-shell is a thin layer over other people's excellent work:
 - **Palette:** the atlas palette builds on starship's [Tokyo Night preset](https://starship.rs/presets/tokyo-night) and folke's [Tokyo Night](https://github.com/folke/tokyonight.nvim) color scheme.
 - **Tools:** [GNU awk](https://www.gnu.org/software/gawk/), [jq](https://jqlang.org), and [iproute2](https://wiki.linuxfoundation.org/networking/iproute2) (`ip`, `ss`) do the heavy lifting behind `dir`, `tree`, `ip` and `ports`.
 
+## Contributing
+
+Bug reports, ideas and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for how to set up, test and submit a change, and the [code of conduct](CODE_OF_CONDUCT.md) for how we work together. Security problems go through the private process in [SECURITY.md](SECURITY.md). Changes are tracked in the [changelog](CHANGELOG.md).
+
 ## License
 
-[MIT](LICENSE). The third-party projects above keep their own licenses. kuhl-shell doesn't bundle any of their code or fonts.
+[MIT](LICENSE) © 2026 Geoff Kuhl. The third-party projects above keep their own licenses. kuhl-shell doesn't bundle any of their code or fonts.

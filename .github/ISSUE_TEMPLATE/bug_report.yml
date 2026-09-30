@@ -1,0 +1,30 @@
+name: Bug report
+description: Something doesn't work or looks wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, what you got. Screenshots help for layout problems.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: kuhl-shell version
+      description: Output of `cat ~/.local/share/kuhl-shell/VERSION`
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Distro, terminal and font
+      placeholder: Ubuntu 24.04, GNOME Terminal, JetBrainsMono Nerd Font
+    validations:
+      required: true
+  - type: input
+    id: bash
+    attributes:
+      label: Bash version
+      description: Output of `bash --version | head -1`

@@ -1,0 +1,6 @@
+shell=bash
+external-sources=true
+# SC2034: palette and ui vars are consumed by the scripts that source them
+# SC1007: `var= other=` is used deliberately to declare empty vars
+# SC2088: the tilde appears in user-facing message text, not a path
+disable=SC2034,SC1007,SC2088
