@@ -6,6 +6,10 @@ All notable changes are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Framed `apt install`, `remove` and `purge`: shows the plan, asks once, runs behind a spinner.
+- Framed `git status`.
+
 ## [0.3.0]
 
 ### Added

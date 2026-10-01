@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# git status, framed: branch and upstream on top, then staged / changed / untracked /
+# conflicted files in their own sections, with a one-line summary at the bottom.
+. "${KUHL_SHELL:-$HOME/.local/share/kuhl-shell}/lib/ui.sh"
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "fatal: not a git repository" >&2; exit 128; }
+gitdir=$(git rev-parse --absolute-git-dir)
+limit=${KUHL_GIT_LIMIT:-12}
+
+branch= oid= upstream= ahead=0 behind=0
+staged=() changed=() untracked=() conflict=()
+
+# git status --porcelain=v2 -z: NUL-separated records; a rename is followed by its old path.
+while IFS= read -r -d '' rec; do
+    case $rec in
+        '# branch.oid '*)      oid=${rec#\# branch.oid }; continue ;;
+        '# branch.head '*)     branch=${rec#\# branch.head }; continue ;;
+        '# branch.upstream '*) upstream=${rec#\# branch.upstream }; continue ;;
+        '# branch.ab '*)       read -r _ _ ahead behind <<< "$rec"; ahead=${ahead#+} behind=${behind#-}; continue ;;
+        '1 '*) read -r _ xy _ _ _ _ _ _ path <<< "$rec"; kind=$xy; entry="$path" ;;
+        '2 '*) read -r _ xy _ _ _ _ _ _ _ path <<< "$rec"; IFS= read -r -d '' orig; kind=$xy; entry="$orig → $path" ;;
+        'u '*) read -r _ _ _ _ _ _ _ _ _ _ path <<< "$rec"; conflict+=("$path"); continue ;;
+        '? '*) untracked+=("${rec#\? }"); continue ;;
+        *) continue ;;
+    esac
+    [[ $kind == [A-Z]* && ${kind:0:1} != . ]] && staged+=("${kind:0:1}$entry")
+    [[ ${kind:1:1} != . ]] && changed+=("${kind:1:1}${entry##* → }")
+done < <(git status --porcelain=v2 --branch -z --untracked-files=normal 2>/dev/null)
+
+# Path with the folder dimmed and the file name bright.
+fmt_path() {
+    local p=$1
+    if [[ $p == */* ]]; then printf '%s%s/%s%s%s' "$SOFT" "${p%/*}" "$R$B" "${p##*/}" "$R"
+    else printf '%s%s%s' "$B" "$p" "$R"; fi
+}
+# section TITLE COLOR ENTRY... → heading, then up to $limit rows. Entries start with a status letter.
+section() {
+    local title=$1 color=$2; shift 2
+    row "$B$color$title$R ${FRAME}($#)$R"
+    local n=0 e s p word icon
+    for e in "$@"; do
+        (( n++ >= limit )) && { row "      $FRAME… and $(( $# - limit )) more$R"; break; }
+        s=${e:0:1} p=${e:1}
+        case $s in
+            A) icon="✚" word=added ;;   M) icon="✎" word=modified ;;
+            D) icon="✖" word=deleted ;; R) icon="➜" word=renamed ;;
+            C) icon="❐" word=copied ;;  T) icon="⇄" word=typechange ;;
+            U) icon="⚠" word=conflict ;; *) icon="•" word=changed ;;
+        esac
+        if [[ $p == *' → '* ]]; then
+            row "$(printf '  %s%s%s %s%-10s%s %s%s %s→%s %s' "$color" "$icon" "$R" "$FRAME" "$word" "$R" \
+                "$SOFT" "${p%% → *}" "$FRAME" "$R" "$(fmt_path "${p##* → }")")"
+        else
+            row "$(printf '  %s%s%s %s%-10s%s %s' "$color" "$icon" "$R" "$FRAME" "$word" "$R" "$(fmt_path "$p")")"
+        fi
+    done
+}
+
+# Header: branch, upstream, repo name.
+if [[ $branch == '(detached)' ]]; then
+    left=$(seg "$B$WARN" "detached at ${oid:0:7}")
+else
+    left=$(seg "$B$GIT" "⎇ $branch")
+fi
+if [[ -n $upstream ]]; then
+    ab=
+    (( ahead ))  && ab+=" $GOOD↑$ahead$R"
+    (( behind )) && ab+=" $WARN↓$behind$R"
+    [[ -z $ab ]] && ab=" ${GOOD}in sync$R"
+    left+="─$(seg "$SOFT" "$upstream")─$FRAME($R${ab# }$FRAME)$R"
+elif [[ $branch != '(detached)' ]]; then
+    left+="─$(seg "$WARN" "no upstream")"
+fi
+top "$left" "$(seg "$SOFT" "${root##*/}")"
+
+# An operation in progress, if any.
+op=
+[[ -d $gitdir/rebase-merge || -d $gitdir/rebase-apply ]] && op=rebase
+[[ -f $gitdir/MERGE_HEAD ]]       && op=merge
+[[ -f $gitdir/CHERRY_PICK_HEAD ]] && op=cherry-pick
+[[ -f $gitdir/REVERT_HEAD ]]      && op=revert
+[[ -f $gitdir/BISECT_LOG ]]       && op=bisect
+[[ -n $op ]] && row "$B$WARN⚠ $op in progress$R"
+
+last=$(git log -1 --format='%h%x09%s%x09%cr' 2>/dev/null)
+if [[ -n $last ]]; then
+    IFS=$'\t' read -r h s when <<< "$last"
+    (( ${#s} > COLS - 30 )) && s=${s:0:COLS-31}…
+    row "$(printf '%slast%s  %s%s%s %s%s %s· %s%s' "$FRAME" "$R" "$LANG_" "$h" "$R" "$B" "$s" "$FRAME" "$when" "$R")"
+else
+    row "${SOFT}no commits yet$R"
+fi
+
+(( ${#conflict[@]} )) && { entries=(); for p in "${conflict[@]}"; do entries+=("U$p"); done; section "conflicts" "$BAD" "${entries[@]}"; }
+(( ${#staged[@]} ))    && section "staged"    "$GOOD" "${staged[@]}"
+(( ${#changed[@]} ))   && section "changed"   "$WARN" "${changed[@]}"
+if (( ${#untracked[@]} )); then
+    row "$B$SOFT""untracked$R ${FRAME}(${#untracked[@]})$R"
+    n=0
+    for p in "${untracked[@]}"; do
+        (( n++ >= limit )) && { row "      $FRAME… and $(( ${#untracked[@]} - limit )) more$R"; break; }
+        row "$(printf '  %s?%s %s%-10s%s %s' "$SOFT" "$R" "$FRAME" "new" "$R" "$(fmt_path "$p")")"
+    done
+fi
+
+stashes=$(git rev-list --walk-reflogs --count refs/stash 2>/dev/null || echo 0)
+(( stashes )) && row "${FRAME}stash$R  $SOFT$stashes saved$R"
+
+total=$(( ${#conflict[@]} + ${#staged[@]} + ${#changed[@]} + ${#untracked[@]} ))
+if (( total == 0 )); then
+    bottom "$(seg "$B$GOOD" "✔ working tree clean")"
+else
+    parts=()
+    (( ${#conflict[@]} ))  && parts+=("$BAD${#conflict[@]} conflicted$R")
+    (( ${#staged[@]} ))    && parts+=("$GOOD${#staged[@]} staged$R")
+    (( ${#changed[@]} ))   && parts+=("$WARN${#changed[@]} changed$R")
+    (( ${#untracked[@]} )) && parts+=("$SOFT${#untracked[@]} untracked$R")
+    sep="$FRAME · $R"; summary=$(IFS=$'\x01'; echo "${parts[*]}"); summary=${summary//$'\x01'/$sep}
+    bottom "$(seg "" "$summary")"
+fi

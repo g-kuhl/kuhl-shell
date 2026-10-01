@@ -1,5 +1,5 @@
 # kuhl-shell: sourced from ~/.bashrc by the block install.sh adds.
-# Sets up the starship prompt, dir, tree, df, du, ip, free, ports, dt, update, welcome
+# Sets up the starship prompt, dir, tree, df, du, ip, free, ports, apt, git status, dt, update, welcome
 # and the login welcome screen.
 # Set KUHL_NO_WELCOME=1 before this line to skip the welcome screen at login.
 [[ $- == *i* ]] || return 0
@@ -7,7 +7,7 @@ export KUHL_SHELL=${KUHL_SHELL:-$HOME/.local/share/kuhl-shell}
 . "$KUHL_SHELL/lib/palette.sh"
 . "$KUHL_SHELL/lib/dir.sh"
 
-unalias update welcome ports df du ip tree free 2>/dev/null
+unalias update welcome ports df du ip tree free apt git sudo 2>/dev/null
 update()  { "$KUHL_SHELL/bin/sys-update" "$@"; }
 welcome() { "$KUHL_SHELL/bin/welcome" "$@"; }
 ports()   { "$KUHL_SHELL/bin/kports" "$@"; }
@@ -41,6 +41,34 @@ tree() {
     if [[ -t 1 && $framed ]]; then "$KUHL_SHELL/bin/ktree" "$@"
     elif command -v tree >/dev/null; then command tree "$@"
     else echo "tree: that option needs the tree package (sudo apt install tree)" >&2; return 1; fi
+}
+
+# apt install|remove|purge PACKAGE... (optionally with -y) is planned, shown and run in a
+# frame; it asks for sudo itself. Other apt commands and flags get the real apt, with
+# sudo added when the command needs root (apt update, upgrade, install -s ...).
+# `sudo apt install ...` is framed too. \apt skips it.
+_kuhl_apt_framed() {
+    local a
+    [[ -t 1 && $1 =~ ^(install|remove|purge)$ && $# -ge 2 ]] || return 1
+    for a in "${@:2}"; do
+        [[ $a == -y || $a == --yes || ( $a != -* && $a != [./]* && $a != *.deb ) ]] || return 1
+    done
+}
+apt() {
+    if _kuhl_apt_framed "$@"; then "$KUHL_SHELL/bin/kapt" "$@"
+    elif (( EUID )) && [[ $1 =~ ^(install|reinstall|remove|purge|autoremove|autopurge|update|upgrade|full-upgrade|dist-upgrade|clean|autoclean|edit-sources|satisfy)$ ]]; then
+        command sudo apt "$@"   # commands that need root get it, so apt update just works
+    else command apt "$@"; fi
+}
+sudo() {
+    if [[ $1 == apt ]] && _kuhl_apt_framed "${@:2}"; then "$KUHL_SHELL/bin/kapt" "${@:2}"
+    else command sudo "$@"; fi
+}
+# git status, plain or -s/-sb/--short, is framed; every other git command is untouched.
+git() {
+    if [[ $1 == status && -t 1 ]] && (( $# == 1 )) || [[ $1 == status && -t 1 && $# -eq 2 && $2 =~ ^(-s|-sb|-bs|--short)$ ]]; then
+        "$KUHL_SHELL/bin/kgit"
+    else command git "$@"; fi
 }
 
 # dt: run a deno task by its number in the prompt's task line (dt 2), or by name.
