@@ -28,10 +28,18 @@ step "idempotent reinstall"
 step "commands run and draw a frame"
 # A pseudo-terminal isn't available on every runner, so force output with script(1) when present.
 run() { if command -v script > /dev/null; then script -qec "$*" /dev/null; else bash -c "$*"; fi; }
-for cmd in "bin/kdf" "bin/kdu $repo" "bin/kip" "bin/kfree" "bin/kports" "bin/ktree $repo"; do
+for cmd in "bin/kdf" "bin/kdu $repo" "bin/kip" "bin/kfree" "bin/kports" "bin/ktree $repo" "bin/kgit"; do
     out=$(run "$KUHL_SHELL/$cmd" 2>&1) || fail "$cmd exited non-zero"
     [[ $out == *'╭'* ]] || fail "$cmd drew no frame"
 done
+
+step "apt wrapper plans without root"
+# Planning uses apt-get -s, so these run unprivileged and change nothing.
+if command -v apt-get > /dev/null; then
+    out=$(run "$KUHL_SHELL/bin/kapt install bash" 2>&1) || fail "kapt install bash exited non-zero"
+    [[ $out == *'nothing to do'* ]] || fail "kapt did not report nothing to do"
+    if run "$KUHL_SHELL/bin/kapt install kuhl-no-such-package" > /dev/null 2>&1; then fail "kapt accepted a missing package"; fi
+fi
 
 step "uninstall"
 "$KUHL_SHELL/uninstall.sh" --yes < /dev/null > /dev/null 2>&1 || fail "uninstall failed"

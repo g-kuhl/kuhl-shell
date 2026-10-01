@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# apt install|remove|purge, framed: plans the change first (apt-get -s), shows what will
+# be added, upgraded or removed, asks once, then runs it behind a spinner.
+# Usage: kapt install|remove|purge [-y] PACKAGE...
+# The full apt output goes to ~/.local/state/kuhl-shell/apt.log.
+. "${KUHL_SHELL:-$HOME/.local/share/kuhl-shell}/lib/ui.sh"
+command -v apt-get >/dev/null || { echo "apt: needs apt (Debian/Ubuntu)" >&2; exit 1; }
+
+verb=$1; shift
+assume=; pkgs=()
+for a in "$@"; do
+    if [[ $a == -y || $a == --yes ]]; then assume=1; else pkgs+=("$a"); fi
+done
+(( ${#pkgs[@]} )) || { echo "usage: apt $verb [-y] PACKAGE..." >&2; exit 2; }
+
+case $verb in
+    install) past=installed ;;
+    remove)  past=removed ;;
+    purge)   past=purged ;;
+    *) echo "kapt: unsupported command '$verb'" >&2; exit 2 ;;
+esac
+
+SUDO=(); (( EUID )) && SUDO=(sudo)
+apt_get=("${SUDO[@]}" env DEBIAN_FRONTEND=noninteractive apt-get -y
+         -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+log_dir=${XDG_STATE_HOME:-$HOME/.local/state}/kuhl-shell
+log=$log_dir/apt.log
+mkdir -p "$log_dir"; : > "$log"
+
+elapsed() { local s=$1; (( s >= 60 )) && echo "$(( s / 60 ))m $(( s % 60 ))s" || echo "${s}s"; }
+cleanup() { tput cnorm 2>/dev/null; [[ -n ${job:-} ]] && kill "$job" 2>/dev/null; }
+trap cleanup EXIT
+trap 'echo; row "$BAD✘ interrupted$R"; exit 130' INT
+
+top "$(seg "$B$ACCENT" "apt $verb")─$(seg "$B$GOOD" "$(hostname)")" \
+    "$(seg "$SOFT" "${pkgs[*]:0:3}$( (( ${#pkgs[@]} > 3 )) && echo ' …')")"
+
+# Plan the change without touching anything. -y keeps apt from waiting on a hidden
+# question (it refuses to remove essential packages that way, which is what we want).
+sim=$(LC_ALL=C apt-get -s -y "$verb" "${pkgs[@]}" 2>&1); sim_rc=$?
+if (( sim_rc )); then
+    grep -E '^(E|W):' <<< "$sim" | head -6 | while IFS= read -r l; do row "$BAD${l:0:COLS-4}$R"; done
+    grep -q 'Unable to locate package' <<< "$sim" && row "${SOFT}try: apt search ${pkgs[0]%%[=/]*}$R"
+    bottom "$(seg "$B$BAD" "✘ can't $verb that")"
+    exit 1
+fi
+
+# Inst name [old] (new suite [arch])  ·  Remv/Purg name [version]
+declare -A req
+for p in "${pkgs[@]}"; do p=${p%%[=/]*}; p=${p%[-+]}; req[${p%%:*}]=1; done
+want=() deps=() added=0 upgraded=0 dropped=0
+inst_re='^Inst ([^ ]+) (\[([^]]+)\] )?\(([^ ]+)'
+drop_re='^(Remv|Purg) ([^ ]+) \[([^]]+)\]'
+while IFS= read -r l; do
+    if [[ $l =~ $inst_re ]]; then
+        name=${BASH_REMATCH[1]} old=${BASH_REMATCH[3]} new=${BASH_REMATCH[4]}
+        if [[ -n $old ]]; then mark="$WARN↑" ver="$FRAME$old$R $FRAME→$R $GOOD$new"; (( upgraded++ ))
+        else mark="$GOOD+" ver="$GOOD$new"; (( added++ )); fi
+    elif [[ $l =~ $drop_re ]]; then
+        name=${BASH_REMATCH[2]} mark="$BAD−" ver="$BAD${BASH_REMATCH[3]}"; (( dropped++ ))
+    else continue; fi
+    entry=$(printf '%s%s%s %s%-34s%s %s%s' "$B" "$mark" "$R" "$LANG_" "${name:0:34}" "$R" "$ver" "$R")
+    if [[ -n ${req[$name]:-} ]]; then want+=("$entry"); else deps+=("$entry"); fi
+done <<< "$sim"
+
+if (( added + upgraded + dropped == 0 )); then
+    grep -E "is already the newest version|is not installed, so not removed" <<< "$sim" |
+        while IFS= read -r l; do row "  $SOFT${l:0:COLS-6}$R"; done
+    bottom "$(seg "$GOOD" "✔ nothing to do")"
+    exit 0
+fi
+
+shown=0 limit=14 total=$(( ${#want[@]} + ${#deps[@]} ))
+for e in "${want[@]}" "${deps[@]}"; do
+    (( total > limit && shown++ == limit - 2 )) && { row "      $FRAME… and $(( total - limit + 2 )) more$R"; break; }
+    row "  $e"
+done
+parts=()
+(( added ))    && parts+=("$GOOD$added new$R")
+(( upgraded )) && parts+=("$WARN$upgraded upgraded$R")
+(( dropped ))  && parts+=("$BAD$dropped to remove$R")
+dl=$(grep -oP '^Need to get \K\S+ ?[kMG]?B(?=/)' <<< "$sim" | head -1)
+disk=$(grep -oP '^After this operation, \K.*(?= of additional disk space will be used)' <<< "$sim")
+freed=$(grep -oP '^After this operation, \K.*(?= disk space will be freed)' <<< "$sim")
+note="$(IFS=' · '; echo "${parts[*]}")"
+[[ -n $dl ]]    && note+=" $FRAME·$R ${SOFT}download $dl$R"
+[[ -n $disk ]]  && note+=" $FRAME·$R ${SOFT}+$disk on disk$R"
+[[ -n $freed ]] && note+=" $FRAME·$R ${SOFT}frees $freed$R"
+row "  $FRAME└$R $note"
+
+if [[ -z $assume ]]; then
+    printf '%s│%s %s%s%s ' "$FRAME" "$R" "$WARN" "proceed? [Y/n]" "$R"
+    read -r -n1 ans || ans=n
+    [[ -n $ans ]] && echo
+    if [[ $ans == [nN] ]]; then bottom "$(seg "$SOFT" "cancelled")"; exit 1; fi
+fi
+
+if (( EUID )); then
+    sudo -v -p "$(row "${WARN}sudo password for %u: $R")" || { bottom "$(seg "$B$BAD" "sudo failed")"; exit 1; }
+fi
+
+label="$verb ${pkgs[*]}"; (( ${#label} > 26 )) && label=${label:0:25}…
+t0=$SECONDS frames=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏) i=0 room=$(( COLS - 34 ))
+tput civis 2>/dev/null
+"${apt_get[@]}" "$verb" "${pkgs[@]}" >> "$log" 2>&1 & job=$!
+while kill -0 "$job" 2>/dev/null; do
+    act=$(grep -v '^\s*$' "$log" | tail -1 | tr -d '\r')
+    (( ${#act} > room )) && act=${act:0:room-1}…
+    printf '\r\e[K%s│%s %s%s%s %-26s %s%s%s' "$FRAME" "$R" "$ACCENT" "${frames[i++ % 10]}" "$R" "$label" "$FRAME" "$act" "$R"
+    sleep 0.1
+done
+wait "$job"; rc=$?; job=
+tput cnorm 2>/dev/null
+took=$(elapsed $(( SECONDS - t0 )))
+
+if (( rc == 0 )); then
+    printf '\r\e[K%s│%s %s✔%s %-26s %s%s%s\n' "$FRAME" "$R" "$GOOD" "$R" "$label" "$FRAME" "$took" "$R"
+    [[ -f /var/run/reboot-required ]] && row "$B$BAD reboot required$R"
+    n=$(( added + upgraded + dropped ))
+    bottom "$(seg "$B$GOOD" "✔ $past $n package$( (( n != 1 )) && echo s) in $took")"
+else
+    printf '\r\e[K%s│%s %s✘ %-26s%s %s%s (exit %d)%s\n' "$FRAME" "$R" "$BAD" "$label" "$R" "$FRAME" "$took" "$rc" "$R"
+    grep -E '^(E|W):' "$log" | tail -6 | while IFS= read -r l; do row "  $DIM$BAD${l:0:COLS-6}$R"; done
+    bottom "$(seg "$B$BAD" "✘ failed after $took")" "$(seg "$SOFT" "log: ${log/#$HOME/\~}")"
+    exit 1
+fi

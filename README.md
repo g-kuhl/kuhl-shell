@@ -7,7 +7,7 @@
 A matching set of bash upgrades built around one look: box-drawing frames (`╭─ │ ╰─`), rules that stretch to the terminal edge, and the **atlas** palette.
 
 - **Prompt:** a two-line [starship](https://starship.rs) prompt.
-- **Everyday commands:** framed versions of `dir`, `tree`, `df`, `du`, `ip`, `free` and `ports`.
+- **Everyday commands:** framed versions of `dir`, `tree`, `df`, `du`, `ip`, `free`, `ports`, `git status` and `apt install`/`remove`/`purge`.
 - **`update`:** a full apt update with a live spinner for each step.
 - **Welcome screen:** shown when you log in.
 
@@ -74,6 +74,8 @@ The framed versions only apply to the forms you type by hand, and only when the 
 | `ip` / `ip a` | Each interface with its state, addresses and MAC, then the default gateway and DNS servers. |
 | `free` / `free -h` | RAM and swap meters, what's available versus cached, and the top memory users, with each program's processes counted together. |
 | `ports [-u] [-s]` | What's listening, by port. It shows the program behind each port and whether the port is open to the network or to this machine only. `-u` adds UDP, and `-s` uses sudo so it can name every program. |
+| `apt install\|remove\|purge pkg...` | Plans the change first and shows what will be added, upgraded or removed, with download and disk sizes. It asks once (`-y` skips that), then runs behind a spinner. It asks for `sudo` itself, and `sudo apt install ...` is framed too. Other apt commands and flags get the real `apt`. The full output goes to `~/.local/state/kuhl-shell/apt.log`. |
+| `git status` | Branch, upstream and ahead/behind, the last commit, then staged, changed, untracked and conflicted files in their own sections, with a stash count and a one-line summary. `-s`, `-sb` and `--short` are framed too. Every other git command is untouched. It lists 12 files per section, and `KUHL_GIT_LIMIT` changes that. |
 | `update` | Runs `apt update`, `upgrade`, `autoremove --purge`, `autoclean` and `snap refresh`, with a spinner for each step. See below. |
 | `welcome` | The login screen again. |
 | `dt [n\|name]` | Runs a deno task by its number in the prompt's task line. |
@@ -104,7 +106,7 @@ The framed versions only apply to the forms you type by hand, and only when the 
 
 ```
 init.sh          sourced from ~/.bashrc: prompt setup and the command wrappers
-bin/             kdf, kdu, kip, kfree, kports, ktree, sys-update, welcome
+bin/             kdf, kdu, kip, kfree, kports, ktree, kapt, kgit, sys-update, welcome
 lib/palette.sh   atlas colors
 lib/ui.sh        frame helpers (top/row/bottom, meters) for the bin/ scripts
 lib/style.awk    icons, colors and permission styling shared by dir and tree
