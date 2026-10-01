@@ -28,7 +28,7 @@ step "idempotent reinstall"
 step "commands run and draw a frame"
 # A pseudo-terminal isn't available on every runner, so force output with script(1) when present.
 run() { if command -v script > /dev/null; then script -qec "$*" /dev/null; else bash -c "$*"; fi; }
-for cmd in "bin/kdf" "bin/kdu $repo" "bin/kip" "bin/kfree" "bin/kports" "bin/ktree $repo" "bin/kgit"; do
+for cmd in "bin/kdf" "bin/kdu $repo" "bin/kip" "bin/kfree" "bin/kports" "bin/ktree $repo" "bin/kgit" "bin/kuptime"; do
     out=$(run "$KUHL_SHELL/$cmd" 2>&1) || fail "$cmd exited non-zero"
     [[ $out == *'╭'* ]] || fail "$cmd drew no frame"
 done

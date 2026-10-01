@@ -8,8 +8,11 @@ All notable changes are listed here. The format follows
 
 ### Added
 - Framed `apt install`, `remove` and `purge`: shows the plan, asks once, runs behind a spinner.
-- Framed `git status`.
+- Framed `git status` and `uptime`.
 - A blank line above each frame so it doesn't run into the prompt; `KUHL_FRAME_GAP=0` turns it off.
+
+### Fixed
+- Boxes without `sudo`, or where you are already root: the installer, `update`, `apt` and `ports -s` no longer call `sudo` blindly. They run directly as root, and otherwise say what's missing.
 
 ## [0.3.0]
 

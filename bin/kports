@@ -10,7 +10,9 @@ for a in "$@"; do
         *)  echo "usage: ports [-u] [-s]" >&2; exit 2 ;;
     esac
 done
-if [[ $elevate ]] && (( EUID )); then
+if [[ $elevate ]] && (( EUID )) && ! command -v sudo >/dev/null; then
+    echo "ports: -s needs sudo, which isn't installed; showing what this user can see" >&2
+elif [[ $elevate ]] && (( EUID )); then
     exec sudo KUHL_SHELL="${KUHL_SHELL:-$HOME/.local/share/kuhl-shell}" COLUMNS="${COLUMNS:-$(tput cols)}" "$0" ${udp:+-u}
 fi
 . "${KUHL_SHELL:-$HOME/.local/share/kuhl-shell}/lib/ui.sh"
