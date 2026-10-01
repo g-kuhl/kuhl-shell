@@ -4,11 +4,12 @@
 # the full output goes to ~/.local/state/sys-update/last.log.
 . "${KUHL_SHELL:-$HOME/.local/share/kuhl-shell}/lib/ui.sh"
 command -v apt-get >/dev/null || { echo "update: needs apt (Debian/Ubuntu)" >&2; exit 1; }
+[[ -n $SUDO_MISSING ]] && { echo "update: needs root: run as root or install sudo" >&2; exit 1; }
 
 log_dir=${XDG_STATE_HOME:-$HOME/.local/state}/sys-update
 log=$log_dir/last.log
 mkdir -p "$log_dir"; : > "$log"
-apt_get=(sudo DEBIAN_FRONTEND=noninteractive apt-get -y
+apt_get=("${SUDO[@]}" env DEBIAN_FRONTEND=noninteractive apt-get -y
          -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
 started=$SECONDS failed=0
 
@@ -28,8 +29,10 @@ top "$(seg "$B$ACCENT" $' system update')─$(seg "$B$GOOD" $' '"$(hostnam
     "$(seg "$SOFT" $' '"started $(date +%H:%M)")"
 
 # Ask for the password up front (in plain view), then keep sudo alive for long upgrades.
-sudo -v -p "$(row "${WARN}"$''" sudo password for %u: $R")" || { bottom "$(seg "$BAD" "sudo failed")"; exit 1; }
-while sleep 50; do sudo -n true 2>/dev/null; done & keepalive=$!
+if (( ${#SUDO[@]} )); then
+    sudo -v -p "$(row "${WARN}"$''" sudo password for %u: $R")" || { bottom "$(seg "$BAD" "sudo failed")"; exit 1; }
+    while sleep 50; do sudo -n true 2>/dev/null; done & keepalive=$!
+fi
 
 # step LABEL CMD... → spinner line while CMD runs, then ✔/✘ with the time it took.
 # Sets $out to what CMD printed, for the caller to summarize.
@@ -85,18 +88,18 @@ if step "removing unused packages" "${apt_get[@]}" autoremove --purge; then
     (( ${removed:-0} )) && note "$SOFT$removed package$( (( removed > 1 )) && echo s) removed$R" || note "${SOFT}nothing to remove$R"
 fi
 
-cache_before=$(sudo du -sb /var/cache/apt/archives 2>/dev/null | cut -f1)
+cache_before=$("${SUDO[@]}" du -sb /var/cache/apt/archives 2>/dev/null | cut -f1)
 if step "cleaning package cache" "${apt_get[@]}" autoclean; then
-    freed=$(( ${cache_before:-0} - $(sudo du -sb /var/cache/apt/archives 2>/dev/null | cut -f1) ))
+    freed=$(( ${cache_before:-0} - $("${SUDO[@]}" du -sb /var/cache/apt/archives 2>/dev/null | cut -f1) ))
     (( freed > 4096 )) && note "${SOFT}freed $B$GOOD$(human "$freed")$R" || note "${SOFT}cache already clean$R"
 fi
 
-if command -v snap >/dev/null && step "refreshing snaps" sudo snap refresh; then
+if command -v snap >/dev/null && step "refreshing snaps" "${SUDO[@]}" snap refresh; then
     note "$SOFT$(grep -v '^\s*$' <<< "$out" | tail -1 | cut -c1-$(( COLS - 10 )))$R"
 fi
 
 # Refresh Ubuntu's MOTD cache (if present) so the welcome screen's update count is current.
-sudo /usr/lib/update-notifier/update-motd-updates-available --force >/dev/null 2>&1
+"${SUDO[@]}" /usr/lib/update-notifier/update-motd-updates-available --force >/dev/null 2>&1
 
 took=$(elapsed $(( SECONDS - started )))
 if [[ -f /var/run/reboot-required ]]; then

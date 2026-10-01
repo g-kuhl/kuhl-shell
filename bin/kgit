@@ -60,7 +60,7 @@ section() {
 if [[ $branch == '(detached)' ]]; then
     left=$(seg "$B$WARN" "detached at ${oid:0:7}")
 else
-    left=$(seg "$B$GIT" "⎇ $branch")
+    left=$(seg "$B$GIT" " $branch")
 fi
 if [[ -n $upstream ]]; then
     ab=

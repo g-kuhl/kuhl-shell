@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# uptime, framed: how long the machine has been up and since when, load averages as
+# meters against the core count, who is logged in, and whether a reboot is pending.
+. "${KUHL_SHELL:-$HOME/.local/share/kuhl-shell}/lib/ui.sh"
+
+read -r up _ < /proc/uptime; up=${up%.*}
+read -r l1 l5 l15 _ < /proc/loadavg
+cores=$(nproc 2>/dev/null || echo 1)
+since=$(date -d "@$(( $(date +%s) - up ))" '+%a %b %-d · %H:%M')
+
+d=$(( up / 86400 )) h=$(( up % 86400 / 3600 )) m=$(( up % 3600 / 60 ))
+human_up=
+(( d )) && human_up+="${d}d "
+(( d || h )) && human_up+="${h}h "
+human_up+="${m}m"
+
+top "$(seg "$B$ACCENT" $' uptime')" "$(seg "$SOFT" "$(hostname)")"
+row "$(printf '%sup%s     %s%s%s  %ssince %s%s' "$ACCENT" "$R" "$B$GOOD" "$human_up" "$R" "$FRAME" "$since" "$R")"
+
+# Load as a percentage of the core count: 100% means every core is busy on average.
+bw=$(( COLS > 100 ? 30 : 16 ))
+for pair in "1m:$l1" "5m:$l5" "15m:$l15"; do
+    label=${pair%%:*} val=${pair#*:}
+    pct=$(awk -v l="$val" -v c="$cores" 'BEGIN { printf "%d", l * 100 / c }')
+    row "$(printf '%sload%s %-3s %s  %s%3d%%%s  %s%s%s' "$ACCENT" "$R" "$label" "$(meter "$(( pct > 100 ? 100 : pct ))" "$bw")" "$B" "$pct" "$R" "$SOFT" "$val" "$R")"
+done
+
+# Sessions as "user<TAB>tty<TAB>host". logind knows about desktop logins that utmp (who) misses.
+sessions=()
+if command -v loginctl >/dev/null && loginctl list-sessions --no-legend >/dev/null 2>&1; then
+    while read -r id _ user _ _ class tty _; do
+        [[ $class == user ]] || continue
+        host=$(loginctl show-session "$id" -p RemoteHost --value 2>/dev/null)
+        [[ $tty == - ]] && tty=desktop
+        sessions+=("$user"$'\t'"$tty"$'\t'"${host:-local}")
+    done < <(loginctl list-sessions --no-legend 2>/dev/null)
+else
+    while read -r user tty rest; do
+        host=$(grep -o '([^)]*)' <<< "$rest" | tr -d '()')
+        sessions+=("$user"$'\t'"$tty"$'\t'"${host:-local}")
+    done < <(who 2>/dev/null)
+fi
+who_lines=("${sessions[@]}")
+if (( ${#who_lines[@]} )); then
+    row "$(printf '%susers%s  %s%d session%s%s' "$ACCENT" "$R" "$SOFT" "${#who_lines[@]}" "$( (( ${#who_lines[@]} != 1 )) && echo s)" "$R")"
+    shown=0
+    for l in "${who_lines[@]}"; do
+        (( shown++ >= 5 )) && { row "        $FRAME… and $(( ${#who_lines[@]} - 5 )) more$R"; break; }
+        IFS=$'\t' read -r user tty host <<< "$l"
+        row "$(printf '        %s%-12s%s %s%-8s%s %s%s%s' "$LANG_" "$user" "$R" "$FRAME" "$tty" "$R" "$SOFT" "$host" "$R")"
+    done
+else
+    row "$(printf '%susers%s  %snobody logged in%s' "$ACCENT" "$R" "$SOFT" "$R")"
+fi
+
+if [[ -f /var/run/reboot-required ]]; then
+    pk=$(sort -u /var/run/reboot-required.pkgs 2>/dev/null | paste -sd, | sed 's/,/, /g')
+    row "$B$BAD reboot required$R${pk:+ $FRAME($SOFT${pk:0:COLS-24}$FRAME)$R}"
+    foot=$(seg "$B$BAD" "reboot required")
+else
+    foot=$(seg "$GOOD" "no reboot needed")
+fi
+bottom "$(seg "$SOFT" "$cores core$( (( cores != 1 )) && echo s)")─$foot"

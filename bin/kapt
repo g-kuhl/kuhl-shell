@@ -20,7 +20,6 @@ case $verb in
     *) echo "kapt: unsupported command '$verb'" >&2; exit 2 ;;
 esac
 
-SUDO=(); (( EUID )) && SUDO=(sudo)
 apt_get=("${SUDO[@]}" env DEBIAN_FRONTEND=noninteractive apt-get -y
          -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
 log_dir=${XDG_STATE_HOME:-$HOME/.local/state}/kuhl-shell
@@ -32,7 +31,7 @@ cleanup() { tput cnorm 2>/dev/null; [[ -n ${job:-} ]] && kill "$job" 2>/dev/null
 trap cleanup EXIT
 trap 'echo; row "$BAD✘ interrupted$R"; exit 130' INT
 
-top "$(seg "$B$ACCENT" "apt $verb")─$(seg "$B$GOOD" "$(hostname)")" \
+top "$(seg "$B$ACCENT" $' '"apt $verb")─$(seg "$B$GOOD" "$(hostname)")" \
     "$(seg "$SOFT" "${pkgs[*]:0:3}$( (( ${#pkgs[@]} > 3 )) && echo ' …')")"
 
 # Plan the change without touching anything. -y keeps apt from waiting on a hidden
@@ -88,6 +87,10 @@ note="$(IFS=' · '; echo "${parts[*]}")"
 [[ -n $freed ]] && note+=" $FRAME·$R ${SOFT}frees $freed$R"
 row "  $FRAME└$R $note"
 
+if [[ -n $SUDO_MISSING ]]; then
+    row "$BAD${SOFT}you're not root and sudo isn't installed here: run this as root$R"
+    bottom "$(seg "$B$BAD" "✘ needs root")"; exit 1
+fi
 if [[ -z $assume ]]; then
     printf '%s│%s %s%s%s ' "$FRAME" "$R" "$WARN" "proceed? [Y/n]" "$R"
     read -r -n1 ans || ans=n
@@ -95,7 +98,7 @@ if [[ -z $assume ]]; then
     if [[ $ans == [nN] ]]; then bottom "$(seg "$SOFT" "cancelled")"; exit 1; fi
 fi
 
-if (( EUID )); then
+if (( ${#SUDO[@]} )); then
     sudo -v -p "$(row "${WARN}sudo password for %u: $R")" || { bottom "$(seg "$B$BAD" "sudo failed")"; exit 1; }
 fi
 

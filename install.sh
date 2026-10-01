@@ -45,7 +45,9 @@ missing=()
 for cmd in gawk jq; do command -v "$cmd" >/dev/null || missing+=("$cmd"); done
 if (( ${#missing[@]} )); then
     if command -v apt-get >/dev/null && ask "install ${missing[*]} with apt?"; then
-        sudo apt-get install -y -qq "${missing[@]}" && ok "installed ${missing[*]}"
+        if (( EUID == 0 )); then apt-get install -y -qq "${missing[@]}" && ok "installed ${missing[*]}"
+        elif command -v sudo >/dev/null; then sudo apt-get install -y -qq "${missing[@]}" && ok "installed ${missing[*]}"
+        else warn "not root and no sudo here: as root, run: apt-get install ${missing[*]}"; fi
     else
         warn "missing ${missing[*]}: dir/tree need gawk, ip and the deno task line need jq"
     fi

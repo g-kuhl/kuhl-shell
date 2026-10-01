@@ -1,5 +1,5 @@
 # kuhl-shell: sourced from ~/.bashrc by the block install.sh adds.
-# Sets up the starship prompt, dir, tree, df, du, ip, free, ports, apt, git status, dt, update, welcome
+# Sets up the starship prompt, dir, tree, df, du, ip, free, ports, uptime, apt, git status, dt, update, welcome
 # and the login welcome screen.
 # Set KUHL_NO_WELCOME=1 before this line to skip the welcome screen at login.
 [[ $- == *i* ]] || return 0
@@ -7,7 +7,7 @@ export KUHL_SHELL=${KUHL_SHELL:-$HOME/.local/share/kuhl-shell}
 . "$KUHL_SHELL/lib/palette.sh"
 . "$KUHL_SHELL/lib/dir.sh"
 
-unalias update welcome ports df du ip tree free apt git sudo 2>/dev/null
+unalias update welcome ports uptime df du ip tree free apt git sudo 2>/dev/null
 update()  { "$KUHL_SHELL/bin/sys-update" "$@"; }
 welcome() { "$KUHL_SHELL/bin/welcome" "$@"; }
 ports()   { "$KUHL_SHELL/bin/kports" "$@"; }
@@ -35,6 +35,10 @@ free() {
     if [[ -t 1 && ( $# -eq 0 || $1 =~ ^-[hmg]$ && $# -eq 1 ) ]]; then "$KUHL_SHELL/bin/kfree"
     else command free "$@"; fi
 }
+uptime() {
+    if [[ -t 1 && ( $# -eq 0 || $* == -p || $* == --pretty ) ]]; then "$KUHL_SHELL/bin/kuptime"
+    else command uptime "$@"; fi
+}
 tree() {
     local a framed=1
     for a in "$@"; do [[ $a == -* && ! $a =~ ^-(L[0-9]*|a|d)$ ]] && framed=; done
@@ -56,7 +60,7 @@ _kuhl_apt_framed() {
 }
 apt() {
     if _kuhl_apt_framed "$@"; then "$KUHL_SHELL/bin/kapt" "$@"
-    elif (( EUID )) && [[ $1 =~ ^(install|reinstall|remove|purge|autoremove|autopurge|update|upgrade|full-upgrade|dist-upgrade|clean|autoclean|edit-sources|satisfy)$ ]]; then
+    elif (( EUID )) && command -v sudo >/dev/null && [[ $1 =~ ^(install|reinstall|remove|purge|autoremove|autopurge|update|upgrade|full-upgrade|dist-upgrade|clean|autoclean|edit-sources|satisfy)$ ]]; then
         # shellcheck disable=SC2033  # `command` bypasses the sudo function defined below
         command sudo apt "$@"   # commands that need root get it, so apt update just works
     else command apt "$@"; fi

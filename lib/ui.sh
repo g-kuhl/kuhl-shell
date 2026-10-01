@@ -7,6 +7,10 @@ FRAME=$(_hex "$ATLAS_FRAME") ACCENT=$(_hex "$ATLAS_ACCENT") SOFT=$(_hex "$ATLAS_
 LANG_=$(_hex "$ATLAS_LANG") WARN=$(_hex "$ATLAS_WARN") BAD=$(_hex "$ATLAS_BAD") GOOD=$(_hex "$ATLAS_GOOD")
 R=$'\e[0m' B=$'\e[1m' DIM=$'\e[2m'
 COLS=${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}
+# Privilege: "${SUDO[@]}" prefixes commands that need root. It is empty when you are
+# already root, and SUDO_MISSING=1 when you aren't root and there is no sudo either.
+SUDO=() SUDO_MISSING=
+if (( EUID )); then if command -v sudo >/dev/null; then SUDO=(sudo); else SUDO_MISSING=1; fi; fi
 # Blank lines printed above each frame, so it doesn't run into the prompt line. 0 = compact.
 KUHL_FRAME_GAP=${KUHL_FRAME_GAP:-1}
 
