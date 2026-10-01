@@ -23,6 +23,7 @@ trap cleanup EXIT
 trap 'echo; row "$BAD✘ interrupted$R"; exit 130' INT
 
 clear
+KUHL_FRAME_GAP=0   # the screen was just cleared
 top "$(seg "$B$ACCENT" $' system update')─$(seg "$B$GOOD" $' '"$(hostname)")" \
     "$(seg "$SOFT" $' '"started $(date +%H:%M)")"
 

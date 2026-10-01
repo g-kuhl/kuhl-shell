@@ -7,6 +7,8 @@ FRAME=$(_hex "$ATLAS_FRAME") ACCENT=$(_hex "$ATLAS_ACCENT") SOFT=$(_hex "$ATLAS_
 LANG_=$(_hex "$ATLAS_LANG") WARN=$(_hex "$ATLAS_WARN") BAD=$(_hex "$ATLAS_BAD") GOOD=$(_hex "$ATLAS_GOOD")
 R=$'\e[0m' B=$'\e[1m' DIM=$'\e[2m'
 COLS=${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}
+# Blank lines printed above each frame, so it doesn't run into the prompt line. 0 = compact.
+KUHL_FRAME_GAP=${KUHL_FRAME_GAP:-1}
 
 # Visible width of a string, ignoring color codes.
 vlen() {
@@ -19,7 +21,7 @@ rule() { local s; printf -v s '%*s' "$(( $1 > 0 ? $1 : 0 ))" ''; printf '%s' "${
 seg() { printf '%s(%s%s%s)' "$FRAME" "$1" "$2" "$FRAME"; }
 # top/bottom LEFT [RIGHT]: a frame line with the gap filled to the terminal edge;
 # RIGHT is dropped when both don't fit.
-top()    { local l=$1 r=${2:-}; (( $(vlen "$l") + $(vlen "$r") + 2 > COLS )) && r=; printf '%s╭─%s%s%s%s\n' "$FRAME" "$l" "$FRAME" "$(rule $(( COLS - 2 - $(vlen "$l") - $(vlen "$r") )))" "$r$R"; }
+top()    { local l=$1 r=${2:-} g; for (( g = 0; g < KUHL_FRAME_GAP; g++ )); do echo; done; (( $(vlen "$l") + $(vlen "$r") + 2 > COLS )) && r=; printf '%s╭─%s%s%s%s\n' "$FRAME" "$l" "$FRAME" "$(rule $(( COLS - 2 - $(vlen "$l") - $(vlen "$r") )))" "$r$R"; }
 bottom() { local l=$1 r=${2:-}; (( $(vlen "$l") + $(vlen "$r") + 2 > COLS )) && r=; printf '%s╰─%s%s%s%s\n' "$FRAME" "$l" "$FRAME" "$(rule $(( COLS - 2 - $(vlen "$l") - $(vlen "$r") )))" "$r$R"; }
 row()    { printf '%s│%s %s\n' "$FRAME" "$R" "$1"; }
 # meter PCT WIDTH → ━━━━━━──── colored good/warn/bad by how full it is.
