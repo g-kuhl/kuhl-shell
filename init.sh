@@ -57,6 +57,7 @@ _kuhl_apt_framed() {
 apt() {
     if _kuhl_apt_framed "$@"; then "$KUHL_SHELL/bin/kapt" "$@"
     elif (( EUID )) && [[ $1 =~ ^(install|reinstall|remove|purge|autoremove|autopurge|update|upgrade|full-upgrade|dist-upgrade|clean|autoclean|edit-sources|satisfy)$ ]]; then
+        # shellcheck disable=SC2033  # `command` bypasses the sudo function defined below
         command sudo apt "$@"   # commands that need root get it, so apt update just works
     else command apt "$@"; fi
 }
