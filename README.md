@@ -99,6 +99,7 @@ The framed versions only apply to the forms you type by hand, and only when the 
 ## Customizing
 
 - **Colors:** the palette is set in `lib/palette.sh` and in the `[palettes.atlas]` tables in `prompt/*.toml`. Change them together.
+- **Frame spacing:** each framed command prints one blank line above its frame. Set `KUHL_FRAME_GAP=0` in `~/.bashrc` (above the kuhl-shell block) for none, or `2` for more.
 - **Tree size:** `tree` stops after 400 entries. Set `KUHL_TREE_LIMIT` to change that.
 - **Local edits:** edits under `~/.local/share/kuhl-shell` are replaced when you reinstall. For lasting changes, edit a clone and run `./install.sh` from it.
 

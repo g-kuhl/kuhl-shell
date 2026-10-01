@@ -9,6 +9,7 @@ All notable changes are listed here. The format follows
 ### Added
 - Framed `apt install`, `remove` and `purge`: shows the plan, asks once, runs behind a spinner.
 - Framed `git status`.
+- A blank line above each frame so it doesn't run into the prompt; `KUHL_FRAME_GAP=0` turns it off.
 
 ## [0.3.0]
 
